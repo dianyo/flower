@@ -1,12 +1,20 @@
 ---
-tags: [finetuning, vision, fds]
-dataset: [Poultry Health (binary)]
-framework: [torch, torchvision]
+tags: [finetuning, vision, fds, fedprox, grad-cam]
+dataset: [Poultry Fecal Health (4-class)]
+framework: [torch, torchvision, timm]
 ---
 
-# Federated Finetuning of a Vision Transformer on Poultry Health
+# Federated Finetuning of Vision Transformers for Poultry Disease Classification
 
-This example shows how to use Flower to federate the finetuning of a [ViT-Base-16](https://pytorch.org/vision/main/models/generated/torchvision.models.vit_b_16.html) pretrained on ImageNet. It finetunes just the classification head on a binary poultry health dataset ([Dianyo/poultry-health](https://huggingface.co/datasets/Dianyo/poultry-health)) using [Flower Datasets](https://flower.ai/docs/datasets/) for on-the-fly IID partitioning across 10 clients. Because only the head is trained, each client needs minimal VRAM (~1 GB at batch size 32).
+This example demonstrates privacy-preserving federated learning for poultry fecal disease classification targeting the **CVPR Agriculture-Vision 2026 Workshop**. It supports:
+
+- **4-class classification**: Healthy, Coccidiosis, Newcastle Disease (NCD), Salmonella
+- **Multiple models**: ViT-B-16, MobileViT-S, Swin Transformer Tiny
+- **FL strategies**: FedAvg and FedProx (for non-IID data)
+- **Data partitioning**: IID and Dirichlet (heterogeneous)
+- **Model interpretability**: Grad-CAM attention visualization
+
+The system finetunes only the classification head on the [Dianyo/poultry-fecal-fl](https://huggingface.co/datasets/Dianyo/poultry-fecal-fl) dataset using [Flower Datasets](https://flower.ai/docs/datasets/). Each client needs minimal VRAM (~1 GB at batch size 32).
 
 ## Set up the project
 
@@ -31,9 +39,14 @@ flowertune-vit-poultry
 
 ### Install dependencies and project
 
-Install the dependencies defined in `pyproject.toml` as well as the `vitpoultry` package.
+Install using `uv` (recommended) or pip:
 
 ```bash
+# Using uv (recommended)
+uv venv && source .venv/bin/activate
+uv pip install -e .
+
+# Or using pip
 pip install -e .
 ```
 
@@ -49,10 +62,17 @@ You can run your Flower project in both _simulation_ and _deployment_ mode witho
 flwr run .
 ```
 
-You can also override some of the settings for your `ClientApp` and `ServerApp` defined in `pyproject.toml`. For example:
+You can override settings defined in `pyproject.toml`:
 
 ```bash
-flwr run . --run-config "num-server-rounds=5 batch-size=64"
+# FedAvg with IID partitioning (default)
+flwr run . --run-config "num-server-rounds=10 strategy=fedavg partitioning=iid"
+
+# FedProx with non-IID Dirichlet partitioning
+flwr run . --run-config "strategy=fedprox partitioning=dirichlet dirichlet-alpha=0.3 proximal-mu=0.1"
+
+# Using MobileViT for edge deployment
+flwr run . --run-config "model-name=mobilevit_s"
 ```
 
 If your system has a GPU you can make use of it:
@@ -89,3 +109,42 @@ flwr run . <SUPERLINK-CONNECTION> --stream
 ```
 
 > **Tip:** Follow this [how-to guide](https://flower.ai/docs/framework/how-to-run-flower-with-deployment-engine.html) to run the same app in this example but with Flower's Deployment Engine. After that, you might be interested in setting up [secure TLS-enabled communications](https://flower.ai/docs/framework/how-to-enable-tls-connections.html) and [SuperNode authentication](https://flower.ai/docs/framework/how-to-authenticate-supernodes.html) in your federation.
+
+## Baselines
+
+Establish upper and lower performance bounds before FL experiments:
+
+```bash
+# Centralized baseline (upper bound)
+python -m vitpoultry.centralized_baseline --epochs 10
+
+# Single-farm baseline (lower bound)
+python -m vitpoultry.single_farm_baseline --partition-id 0
+```
+
+## Model Interpretability
+
+Generate Grad-CAM visualizations to understand model predictions:
+
+```bash
+# Single image
+python -m vitpoultry.gradcam_viz --model-path final_model.pt --image-path sample.jpg
+
+# Batch processing
+python -m vitpoultry.gradcam_viz --model-path final_model.pt --image-dir test_images/ --num-images 20
+```
+
+## Data Curation
+
+To build the consolidated 4-class dataset from multiple sources:
+
+```bash
+# 1. Download raw datasets
+python -m vitpoultry.data_curation.download_datasets
+
+# 2. Deduplicate images
+python -m vitpoultry.data_curation.deduplicate
+
+# 3. Merge and upload to HuggingFace
+python -m vitpoultry.data_curation.merge_and_upload
+```
