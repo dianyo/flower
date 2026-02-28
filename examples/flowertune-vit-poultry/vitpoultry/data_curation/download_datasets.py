@@ -74,6 +74,82 @@ def download_huggingface(dataset_name: str, output_dir: Path):
     return ds
 
 
+def download_mendeley_nigeria(output_dir: Path) -> None:
+    """Download Mendeley Nigeria dataset (binary classification).
+    
+    DOI: 10.17632/8pnbzpt2k9.1
+    This is the source for Dianyo/poultry-health (which may be partial).
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Mendeley Data API endpoint for this dataset
+    # The dataset has multiple versions, we want v1
+    api_url = "https://data.mendeley.com/public-api/datasets/8pnbzpt2k9"
+    
+    print("\nFetching Mendeley dataset metadata...")
+    try:
+        resp = requests.get(api_url)
+        if resp.status_code != 200:
+            print(f"  API returned {resp.status_code}, falling back to manual instructions")
+            print_mendeley_manual_instructions(output_dir)
+            return
+            
+        data = resp.json()
+        
+        # Get the files from the dataset
+        files = data.get("files", [])
+        if not files:
+            print("  No files found via API, trying direct download...")
+            # Try direct download URL pattern
+            direct_url = "https://data.mendeley.com/public-files/datasets/8pnbzpt2k9/files/poultry_data.zip/file_downloaded"
+            filepath = output_dir / "poultry_data.zip"
+            if not filepath.exists():
+                try:
+                    download_file(direct_url, filepath, "poultry_data.zip")
+                    print(f"  Extracting to {output_dir}...")
+                    with zipfile.ZipFile(filepath, "r") as z:
+                        z.extractall(output_dir)
+                except Exception as e:
+                    print(f"  Direct download failed: {e}")
+                    print_mendeley_manual_instructions(output_dir)
+            return
+            
+        for file_info in files:
+            filename = file_info.get("filename", "unknown")
+            file_id = file_info.get("id")
+            
+            if not file_id:
+                continue
+                
+            filepath = output_dir / filename
+            if filepath.exists():
+                print(f"  Skipping {filename} (already exists)")
+                continue
+            
+            # Construct download URL
+            download_url = f"https://data.mendeley.com/public-files/datasets/8pnbzpt2k9/files/{file_id}/file_downloaded"
+            print(f"  Downloading {filename}...")
+            download_file(download_url, filepath, filename)
+            
+            if filename.endswith(".zip"):
+                print(f"  Extracting {filename}...")
+                with zipfile.ZipFile(filepath, "r") as z:
+                    z.extractall(output_dir / filename.replace(".zip", ""))
+                    
+    except Exception as e:
+        print(f"  Error accessing Mendeley API: {e}")
+        print_mendeley_manual_instructions(output_dir)
+
+
+def print_mendeley_manual_instructions(output_dir: Path) -> None:
+    """Print manual download instructions for Mendeley dataset."""
+    print("\n  MANUAL DOWNLOAD REQUIRED:")
+    print("  URL: https://data.mendeley.com/datasets/8pnbzpt2k9/1")
+    print("  1. Click 'Download' button")
+    print("  2. Accept terms if prompted")
+    print(f"  3. Extract to: {output_dir.absolute()}")
+
+
 def print_manual_instructions() -> None:
     """Print instructions for manual downloads."""
     print("\n" + "=" * 60)
@@ -88,13 +164,6 @@ def print_manual_instructions() -> None:
     print("   b) Choose 'Folder' format (not YOLO/COCO)")
     print(f"   c) Extract to: {DATA_DIR.absolute() / 'roboflow'}")
 
-    print("\n2. MENDELEY NIGERIA DATASET (Binary Classification)")
-    print("-" * 40)
-    print("   URL: https://data.mendeley.com/datasets/8pnbzpt2k9/1")
-    print("   Note: This dataset is already uploaded as Dianyo/poultry-health")
-    print("   Download only if you need to verify the source data.")
-    print(f"   Extract to: {DATA_DIR.absolute() / 'mendeley_nigeria'}")
-
 
 def main():
     """Main download routine."""
@@ -107,7 +176,12 @@ def main():
     hf_dir = DATA_DIR / "huggingface"
     hf_dir.mkdir(exist_ok=True)
 
+    # Download 4-class dataset (Zenodo LAB data)
     download_huggingface("Dianyo/fecal-health", hf_dir)
+    
+    # Download binary dataset for comparison with full Mendeley
+    print("\nDownloading Dianyo/poultry-health (binary) for verification...")
+    download_huggingface("Dianyo/poultry-health", hf_dir)
 
     print("\n" + "=" * 60)
     print("STEP 2: Zenodo AI4D Tanzania Dataset (FARM data)")
@@ -117,6 +191,15 @@ def main():
     zenodo_dir = DATA_DIR / "zenodo_tanzania"
     download_zenodo("5801834", zenodo_dir)
 
+    print("\n" + "=" * 60)
+    print("STEP 3: Mendeley Nigeria Dataset (Full Binary)")
+    print("=" * 60)
+    print("DOI: 10.17632/8pnbzpt2k9.1")
+    print("This is the FULL source for Dianyo/poultry-health")
+    
+    mendeley_dir = DATA_DIR / "mendeley_nigeria"
+    download_mendeley_nigeria(mendeley_dir)
+
     print_manual_instructions()
 
     print("\n" + "=" * 60)
@@ -124,7 +207,7 @@ def main():
     print("=" * 60)
     print(f"Data directory: {DATA_DIR.absolute()}")
     print("\nContents:")
-    for item in DATA_DIR.iterdir():
+    for item in sorted(DATA_DIR.iterdir()):
         if item.is_dir():
             file_count = sum(1 for _ in item.rglob("*") if _.is_file())
             print(f"  {item.name}/: {file_count} files")
@@ -132,9 +215,17 @@ def main():
             print(f"  {item.name}")
 
     print("\n" + "=" * 60)
+    print("VERIFICATION")
+    print("=" * 60)
+    print("Compare Mendeley download with Dianyo/poultry-health:")
+    print(f"  - Full Mendeley: {DATA_DIR / 'mendeley_nigeria'}")
+    print(f"  - HF poultry-health: {DATA_DIR / 'huggingface' / 'Dianyo_poultry-health'}")
+    print("If Mendeley has more images, consider updating poultry-health on HuggingFace.")
+
+    print("\n" + "=" * 60)
     print("NEXT STEPS")
     print("=" * 60)
-    print("1. Complete manual downloads (Roboflow, optionally Mendeley)")
+    print("1. Complete manual download for Roboflow (if needed)")
     print("2. Run: python -m vitpoultry.data_curation.deduplicate")
     print("3. Run: python -m vitpoultry.data_curation.merge_and_upload")
 
