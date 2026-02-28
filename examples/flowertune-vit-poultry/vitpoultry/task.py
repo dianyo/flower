@@ -3,27 +3,66 @@
 import torch
 from datasets import load_from_disk
 from flwr_datasets import FederatedDataset
-from flwr_datasets.partitioner import IidPartitioner
+from flwr_datasets.partitioner import DirichletPartitioner, IidPartitioner
+from sklearn.metrics import classification_report, f1_score, precision_score, recall_score
 from torchvision.models import ViT_B_16_Weights, vit_b_16
 from torchvision.transforms import (
     CenterCrop,
+    ColorJitter,
     Compose,
     Normalize,
+    RandomHorizontalFlip,
     RandomResizedCrop,
+    RandomRotation,
+    RandomVerticalFlip,
     Resize,
     ToTensor,
 )
 
+try:
+    import timm
+    TIMM_AVAILABLE = True
+except ImportError:
+    TIMM_AVAILABLE = False
 
-def get_model(num_classes: int):
-    """Return a pretrained ViT with all layers frozen except output head."""
-    model = vit_b_16(weights=ViT_B_16_Weights.IMAGENET1K_V1)
 
-    in_features = model.heads[-1].in_features
-    model.heads[-1] = torch.nn.Linear(in_features, num_classes)
+def get_model(num_classes: int, model_name: str = "vit_b_16"):
+    """Return a pretrained model with frozen backbone and trainable head.
 
-    model.requires_grad_(False)
-    model.heads.requires_grad_(True)
+    Args:
+        num_classes: Number of output classes.
+        model_name: One of "vit_b_16", "mobilevit_s", "swin_tiny".
+
+    Returns:
+        Model with frozen backbone and trainable classification head.
+    """
+    if model_name == "vit_b_16":
+        model = vit_b_16(weights=ViT_B_16_Weights.IMAGENET1K_V1)
+        in_features = model.heads[-1].in_features
+        model.heads[-1] = torch.nn.Linear(in_features, num_classes)
+        model.requires_grad_(False)
+        model.heads.requires_grad_(True)
+
+    elif model_name == "mobilevit_s":
+        if not TIMM_AVAILABLE:
+            raise ImportError("Install timm for MobileViT: pip install timm")
+        model = timm.create_model("mobilevit_s", pretrained=True, num_classes=num_classes)
+        for param in model.parameters():
+            param.requires_grad = False
+        for param in model.head.parameters():
+            param.requires_grad = True
+
+    elif model_name == "swin_tiny":
+        if not TIMM_AVAILABLE:
+            raise ImportError("Install timm for Swin: pip install timm")
+        model = timm.create_model("swin_tiny_patch4_window7_224", pretrained=True, num_classes=num_classes)
+        for param in model.parameters():
+            param.requires_grad = False
+        for param in model.head.parameters():
+            param.requires_grad = True
+
+    else:
+        raise ValueError(f"Unknown model: {model_name}. Choose: vit_b_16, mobilevit_s, swin_tiny")
 
     return model
 
@@ -48,12 +87,27 @@ def trainer(net, trainloader, optimizer, epochs, device: torch.device | str):
     return total_loss / total_samples
 
 
-def test(net, testloader, device: torch.device | str):
-    """Validate the network on the entire test set."""
+def test(net, testloader, device: torch.device | str, return_detailed: bool = False):
+    """Validate the network on the entire test set.
+
+    Args:
+        net: Model to evaluate.
+        testloader: DataLoader for test data.
+        device: Device to run on.
+        return_detailed: If True, return precision, recall, F1 per class.
+
+    Returns:
+        If return_detailed is False: (loss, accuracy)
+        If return_detailed is True: dict with loss, accuracy, precision, recall, f1
+    """
     criterion = torch.nn.CrossEntropyLoss()
     correct, loss = 0, 0.0
+    all_preds = []
+    all_labels = []
+
     net.to(device)
     net.eval()
+
     with torch.no_grad():
         for data in testloader:
             images, labels = data["image"].to(device), data["label"].to(device)
@@ -61,18 +115,72 @@ def test(net, testloader, device: torch.device | str):
             loss += criterion(outputs, labels).item()
             _, predicted = torch.max(outputs.data, 1)
             correct += (predicted == labels).sum().item()
+
+            all_preds.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
     accuracy = correct / len(testloader.dataset)
-    return loss, accuracy
+
+    if not return_detailed:
+        return loss, accuracy
+
+    precision = precision_score(all_labels, all_preds, average="macro", zero_division=0)
+    recall = recall_score(all_labels, all_preds, average="macro", zero_division=0)
+    f1 = f1_score(all_labels, all_preds, average="macro", zero_division=0)
+
+    return {
+        "loss": loss,
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "predictions": all_preds,
+        "labels": all_labels,
+    }
+
+
+def get_classification_report(labels, predictions, class_names=None):
+    """Generate detailed classification report."""
+    return classification_report(
+        labels, predictions, target_names=class_names, zero_division=0
+    )
 
 
 fds = None
 
 
-def get_dataset_partition(num_partitions: int, partition_id: int, dataset_name: str):
-    """Get dataset and partition it IID across clients (Simulation Engine)."""
+def get_dataset_partition(
+    num_partitions: int,
+    partition_id: int,
+    dataset_name: str,
+    partitioning: str = "iid",
+    dirichlet_alpha: float = 0.5,
+):
+    """Get dataset and partition it across clients (Simulation Engine).
+
+    Args:
+        num_partitions: Number of client partitions.
+        partition_id: ID of the partition to load.
+        dataset_name: HuggingFace dataset name.
+        partitioning: One of "iid" or "dirichlet" (non-iid).
+        dirichlet_alpha: Concentration parameter for Dirichlet (lower = more heterogeneous).
+
+    Returns:
+        Dataset partition for the specified client.
+    """
     global fds
     if fds is None:
-        partitioner = IidPartitioner(num_partitions)
+        if partitioning == "iid":
+            partitioner = IidPartitioner(num_partitions)
+        elif partitioning == "dirichlet":
+            partitioner = DirichletPartitioner(
+                num_partitions=num_partitions,
+                partition_by="label",
+                alpha=dirichlet_alpha,
+            )
+        else:
+            raise ValueError(f"Unknown partitioning: {partitioning}. Choose: iid, dirichlet")
+
         fds = FederatedDataset(
             dataset=dataset_name, partitioners={"train": partitioner}
         )
@@ -103,14 +211,35 @@ def apply_eval_transforms(batch):
     return batch
 
 
-def apply_train_transforms(batch):
-    """Apply standard training transforms with light augmentation."""
-    transforms = Compose(
-        [
-            RandomResizedCrop((224, 224)),
-            ToTensor(),
-            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
+def apply_train_transforms(batch, heavy_augmentation: bool = True):
+    """Apply training transforms with optional heavy augmentation.
+
+    Args:
+        batch: Batch of images from HuggingFace dataset.
+        heavy_augmentation: If True, use aggressive augmentation for better generalization.
+
+    Returns:
+        Batch with transformed images.
+    """
+    if heavy_augmentation:
+        transforms = Compose(
+            [
+                RandomResizedCrop((224, 224), scale=(0.8, 1.0)),
+                RandomHorizontalFlip(p=0.5),
+                RandomVerticalFlip(p=0.5),
+                RandomRotation(degrees=15),
+                ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+                ToTensor(),
+                Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
+    else:
+        transforms = Compose(
+            [
+                RandomResizedCrop((224, 224)),
+                ToTensor(),
+                Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
     batch["image"] = [transforms(img) for img in batch["image"]]
     return batch
