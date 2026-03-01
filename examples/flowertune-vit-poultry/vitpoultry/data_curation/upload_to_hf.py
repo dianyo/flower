@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import os
 from collections import Counter
 from pathlib import Path
 
@@ -43,6 +44,8 @@ LABEL_MAP_4CLASS = {
 
 CLASS_NAMES_BINARY = ["healthy", "unhealthy"]
 CLASS_NAMES_4CLASS = ["healthy", "cocci", "ncd", "salmo"]
+
+os.environ["HF_TOKEN"] = os.getenv("HF_TOKEN_WRITE")
 
 
 def build_binary_dataset(mendeley_dir: Path) -> DatasetDict:
