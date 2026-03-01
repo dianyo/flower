@@ -13,12 +13,31 @@ We curate two datasets for different experimental settings:
 
 ## Data Sources
 
-### 1. Zenodo AI4D Tanzania Dataset
+### 1. Zenodo AI4D Tanzania Datasets
+
+We download two Zenodo records from the same research project:
+
+#### a) Record 4628934 - FARM Data (Main Dataset)
+- **DOI**: 10.5281/zenodo.4628934
+- **URL**: https://zenodo.org/records/4628934
+- **Content**: Poultry fecal images from farms in Arusha and Kilimanjaro, Tanzania
+- **Collection Period**: September 2020 - February 2021
+- **Labels**: 4-class
+- **Image Counts**:
+  - cocci.zip: 2,103 images
+  - healthy.zip: 2,057 images
+  - salmo.zip: 2,276 images
+  - ncd.zip: 376 images
+  - **Total: 6,812 images**
+- **Download Location**: `raw_data/zenodo_farm/`
+
+#### b) Record 5801834 - LAB Data (PCR-Confirmed)
 - **DOI**: 10.5281/zenodo.5801834
-- **Content**: Poultry fecal images from Tanzanian farms
-- **Labels**: 4-class (Healthy, Coccidiosis, Newcastle Disease, Salmonella)
-- **Unique Feature**: Contains `farm_id` metadata for natural federated splits
-- **Download**: Automatic via Zenodo API
+- **Content**: Laboratory PCR-confirmed samples (higher quality, smaller)
+- **Labels**: 4-class
+- **Image Count**: ~1,255 images
+- **Use Case**: High-confidence validation subset
+- **Download Location**: `raw_data/zenodo_lab/`
 
 ### 2. Roboflow Fecal Disease Datasets
 Two datasets from Roboflow Universe:
@@ -190,8 +209,13 @@ raw_data/
 ├── huggingface/
 │   ├── Dianyo_fecal-health/
 │   └── Dianyo_poultry-health/
-├── zenodo_tanzania/
-│   └── [extracted farm data]
+├── zenodo_farm/                    # Record 4628934 (6,812 images)
+│   ├── cocci/
+│   ├── healthy/
+│   ├── salmo/
+│   └── ncd/
+├── zenodo_lab/                     # Record 5801834 (PCR-confirmed)
+│   └── [extracted lab data]
 ├── roboflow/
 │   ├── fecal_disease-images-fecal/
 │   │   ├── healthy/

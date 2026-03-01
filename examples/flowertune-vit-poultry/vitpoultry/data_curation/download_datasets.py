@@ -293,12 +293,24 @@ def main():
     download_huggingface("Dianyo/poultry-health", hf_dir)
 
     print("\n" + "=" * 60)
-    print("STEP 2: Zenodo AI4D Tanzania Dataset (FARM data)")
+    print("STEP 2: Zenodo AI4D Tanzania Datasets")
     print("=" * 60)
-    print("Record 5801834 contains both lab and farm data with farm_id metadata")
-
-    zenodo_dir = DATA_DIR / "zenodo_tanzania"
-    download_zenodo("5801834", zenodo_dir)
+    
+    # Record 4628934 - FARM data (main dataset, 6,812 images)
+    # DOI: 10.5281/zenodo.4628934
+    # Contains: cocci (2103), healthy (2057), salmo (2276), ncd (376)
+    print("\n--- Record 4628934: FARM Data (6,812 images) ---")
+    print("Source: Poultry farms in Arusha and Kilimanjaro, Tanzania")
+    print("DOI: 10.5281/zenodo.4628934")
+    zenodo_farm_dir = DATA_DIR / "zenodo_farm"
+    download_zenodo("4628934", zenodo_farm_dir)
+    
+    # Record 5801834 - LAB data (PCR-confirmed, ~1,255 images)
+    # Higher quality but smaller, good for validation
+    print("\n--- Record 5801834: LAB Data (PCR-confirmed) ---")
+    print("Source: Laboratory-confirmed samples")
+    zenodo_lab_dir = DATA_DIR / "zenodo_lab"
+    download_zenodo("5801834", zenodo_lab_dir)
 
     print("\n" + "=" * 60)
     print("STEP 3: Roboflow Datasets (2 datasets)")
