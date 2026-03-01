@@ -74,14 +74,28 @@ def convert_coco_dataset(coco_dir: Path, output_dir: Path) -> int:
                 "path": split_dir / img["file_name"],
             }
         
-        # Get the primary label for each image (first annotation)
-        image_labels = {}
+        # Collect ALL labels for each image
+        image_all_labels = {}  # img_id -> set of class names
         for ann in data.get("annotations", []):
             img_id = ann["image_id"]
             cat_id = ann["category_id"]
             
-            if img_id not in image_labels and cat_id in coco_id_to_class:
-                image_labels[img_id] = coco_id_to_class[cat_id]
+            if cat_id in coco_id_to_class:
+                if img_id not in image_all_labels:
+                    image_all_labels[img_id] = set()
+                image_all_labels[img_id].add(coco_id_to_class[cat_id])
+        
+        # Filter: keep only images with single consistent class
+        image_labels = {}
+        multi_label_count = 0
+        for img_id, labels in image_all_labels.items():
+            if len(labels) == 1:
+                image_labels[img_id] = labels.pop()
+            else:
+                multi_label_count += 1
+        
+        if multi_label_count > 0:
+            print(f"    Discarded {multi_label_count} multi-class images")
         
         # Copy images to class folders
         for img_id, class_name in image_labels.items():
