@@ -3,7 +3,8 @@
 This script downloads poultry fecal health data from:
 1. HuggingFace: Dianyo/fecal-health (Zenodo LAB data, 4-class PCR-confirmed)
 2. Zenodo: AI4D Tanzania dataset (record 5801834) - contains FARM data with farm_id
-3. Manual instructions for Roboflow and Mendeley datasets
+3. Roboflow: Two fecal disease datasets via API
+4. Mendeley: Nigeria binary dataset
 
 Usage:
     python -m vitpoultry.data_curation.download_datasets
@@ -17,6 +18,23 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 DATA_DIR = Path("raw_data")
+
+ROBOFLOW_API_KEY = "LDLTxPHRFk7PxGYidEfa"
+
+ROBOFLOW_DATASETS = [
+    {
+        "workspace": "fecal",
+        "project": "disease-images-fecal",
+        "version": 2,
+        "description": "Fecal Disease Images (main dataset)",
+    },
+    {
+        "workspace": "thesis-pr4oh",
+        "project": "fecal-lbh0j",
+        "version": 1,
+        "description": "Fecal LBH0J (thesis dataset)",
+    },
+]
 
 
 def download_file(url: str, filepath: Path, desc: str = None) -> None:
@@ -141,6 +159,70 @@ def download_mendeley_nigeria(output_dir: Path) -> None:
         print_mendeley_manual_instructions(output_dir)
 
 
+def download_roboflow(output_dir: Path, api_key: str = None) -> None:
+    """Download datasets from Roboflow using their API.
+    
+    Downloads both:
+    1. fecal/disease-images-fecal (main dataset)
+    2. thesis-pr4oh/fecal-lbh0j (thesis dataset)
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    api_key = api_key or ROBOFLOW_API_KEY
+    
+    try:
+        from roboflow import Roboflow
+    except ImportError:
+        print("  Roboflow not installed. Run: pip install roboflow")
+        print_roboflow_manual_instructions(output_dir)
+        return
+    
+    rf = Roboflow(api_key=api_key)
+    
+    for dataset_info in ROBOFLOW_DATASETS:
+        workspace = dataset_info["workspace"]
+        project_name = dataset_info["project"]
+        version_num = dataset_info["version"]
+        description = dataset_info["description"]
+        
+        dataset_dir = output_dir / f"{workspace}_{project_name}"
+        
+        if dataset_dir.exists() and any(dataset_dir.iterdir()):
+            print(f"  Skipping {description} (already exists at {dataset_dir})")
+            continue
+        
+        print(f"\n  Downloading: {description}")
+        print(f"    Workspace: {workspace}")
+        print(f"    Project: {project_name}")
+        print(f"    Version: {version_num}")
+        
+        try:
+            project = rf.workspace(workspace).project(project_name)
+            version = project.version(version_num)
+            
+            # Download to a temp location, then move
+            dataset = version.download("folder", location=str(dataset_dir))
+            print(f"    ✓ Downloaded to: {dataset_dir}")
+            
+        except Exception as e:
+            print(f"    ✗ Error downloading {project_name}: {e}")
+            continue
+
+
+def print_roboflow_manual_instructions(output_dir: Path) -> None:
+    """Print manual download instructions for Roboflow datasets."""
+    print("\n  MANUAL DOWNLOAD REQUIRED for Roboflow:")
+    print("\n  Dataset 1: disease-images-fecal")
+    print("    URL: https://universe.roboflow.com/fecal/disease-images-fecal")
+    print("    → Download as 'Folder' format")
+    print(f"    → Extract to: {output_dir / 'fecal_disease-images-fecal'}")
+    
+    print("\n  Dataset 2: fecal-lbh0j")
+    print("    URL: https://universe.roboflow.com/thesis-pr4oh/fecal-lbh0j")
+    print("    → Download as 'Folder' format")
+    print(f"    → Extract to: {output_dir / 'thesis-pr4oh_fecal-lbh0j'}")
+
+
 def print_mendeley_manual_instructions(output_dir: Path) -> None:
     """Print manual download instructions for Mendeley dataset."""
     print("\n  MANUAL DOWNLOAD REQUIRED:")
@@ -148,21 +230,6 @@ def print_mendeley_manual_instructions(output_dir: Path) -> None:
     print("  1. Click 'Download' button")
     print("  2. Accept terms if prompted")
     print(f"  3. Extract to: {output_dir.absolute()}")
-
-
-def print_manual_instructions() -> None:
-    """Print instructions for manual downloads."""
-    print("\n" + "=" * 60)
-    print("MANUAL DOWNLOAD INSTRUCTIONS")
-    print("=" * 60)
-
-    print("\n1. ROBOFLOW DATASET (Fecal Disease Images)")
-    print("-" * 40)
-    print("   URL: https://universe.roboflow.com/fecal/disease-images-fecal")
-    print("   Steps:")
-    print("   a) Click 'Download Dataset'")
-    print("   b) Choose 'Folder' format (not YOLO/COCO)")
-    print(f"   c) Extract to: {DATA_DIR.absolute() / 'roboflow'}")
 
 
 def main():
@@ -192,15 +259,21 @@ def main():
     download_zenodo("5801834", zenodo_dir)
 
     print("\n" + "=" * 60)
-    print("STEP 3: Mendeley Nigeria Dataset (Full Binary)")
+    print("STEP 3: Roboflow Datasets (2 datasets)")
+    print("=" * 60)
+    print("Downloading fecal disease images from Roboflow...")
+    
+    roboflow_dir = DATA_DIR / "roboflow"
+    download_roboflow(roboflow_dir)
+
+    print("\n" + "=" * 60)
+    print("STEP 4: Mendeley Nigeria Dataset (Full Binary)")
     print("=" * 60)
     print("DOI: 10.17632/8pnbzpt2k9.1")
     print("This is the FULL source for Dianyo/poultry-health")
     
     mendeley_dir = DATA_DIR / "mendeley_nigeria"
     download_mendeley_nigeria(mendeley_dir)
-
-    print_manual_instructions()
 
     print("\n" + "=" * 60)
     print("DOWNLOAD SUMMARY")
