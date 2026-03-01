@@ -1,15 +1,11 @@
-"""Merge deduplicated datasets and upload to HuggingFace.
+"""DEPRECATED: Use upload_to_hf.py instead.
 
-This script:
-1. Merges deduplicated images from multiple sources
-2. Standardizes labels to 4-class (healthy/cocci/ncd/salmo)
-3. Extracts farm_id metadata for natural federated splits
-4. Creates train/test splits by farm_id
-5. Uploads to HuggingFace as Dianyo/poultry-fecal-fl
-6. Verifies existing Dianyo/fecal-health and Dianyo/poultry-health datasets
+This script has been superseded by:
+- upload_to_hf.py: Build and upload datasets to HuggingFace
+- verify_datasets.py: Verify downloaded data
 
-Usage:
-    python -m vitpoultry.data_curation.merge_and_upload
+Original description:
+Merge deduplicated datasets and upload to HuggingFace.
 """
 
 import re

@@ -2,7 +2,7 @@
 
 This script downloads poultry fecal health data from:
 1. HuggingFace: Dianyo/fecal-health (Zenodo LAB data, 4-class PCR-confirmed)
-2. Zenodo: AI4D Tanzania dataset (record 5801834) - contains FARM data with farm_id
+2. Zenodo: AI4D Tanzania datasets (records 4628934 and 5801834)
 3. Roboflow: Two fecal disease datasets via API
 4. Mendeley: Nigeria binary dataset
 

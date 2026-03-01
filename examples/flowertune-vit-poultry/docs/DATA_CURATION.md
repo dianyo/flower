@@ -158,9 +158,7 @@ python -m vitpoultry.data_curation.upload_to_hf --dataset 4class
 **Process**:
 1. Builds dataset from local files
 2. Extracts labels from folder structure
-3. Creates train/test splits:
-   - **Binary**: 80/20 random split
-   - **4-class**: Split by `farm_id` (20% of farms held out for testing)
+3. Creates train/test splits (80/20 random split)
 4. Uploads to HuggingFace Hub
 
 ## Label Standardization
@@ -181,16 +179,13 @@ python -m vitpoultry.data_curation.upload_to_hf --dataset 4class
 
 ## Data Splits
 
-### 4-Class Dataset (Farm-Based Split)
-To simulate realistic federated learning scenarios, we split by `farm_id`:
-- **Train**: 80% of farms
-- **Test**: 20% of farms (held out entirely)
+Both datasets use stratified random 80/20 train/test splits:
+- **Train**: 80% of images (stratified by class)
+- **Test**: 20% of images (stratified by class)
 
-This ensures the test set contains data from farms not seen during training, testing generalization across different data sources.
-
-### Binary Dataset (Random Split)
-- **Train**: 80% of images (random)
-- **Test**: 20% of images (random)
+**Note**: The original Zenodo dataset does not include farm metadata. For federated learning experiments simulating multiple farms, we use synthetic partitioning strategies:
+- **IID**: Uniform random partition across clients
+- **Non-IID**: Dirichlet partitioning (α controls heterogeneity)
 
 ## Quality Control
 

@@ -114,20 +114,9 @@ def build_4class_dataset(data_dir: Path) -> DatasetDict:
             if label is None:
                 continue
             
-            # Extract farm_id
-            farm_id = "unknown"
-            match = re.search(r"[Ff]arm[_\-]?(\d+)", str(img_path))
-            if match:
-                farm_id = f"farm_{int(match.group(1)):02d}"
-            elif "roboflow" in path_str:
-                farm_id = f"roboflow_{hash(img_path.stem) % 10:02d}"
-            elif "zenodo" in path_str:
-                farm_id = "zenodo_lab"
-            
             records.append({
                 "image": str(img_path.absolute()),
                 "label": label,
-                "farm_id": farm_id,
             })
     
     if not records:
@@ -139,14 +128,16 @@ def build_4class_dataset(data_dir: Path) -> DatasetDict:
     for i, name in enumerate(CLASS_NAMES_4CLASS):
         print(f"  {name}: {label_counts.get(i, 0)}")
     
-    farm_ids = sorted(set(r["farm_id"] for r in records))
-    print(f"Unique farms: {len(farm_ids)}")
+    # Stratified 80/20 train/test split
+    from sklearn.model_selection import train_test_split
+    labels = [r["label"] for r in records]
+    train_records, test_records = train_test_split(
+        records, test_size=0.2, stratify=labels, random_state=42
+    )
     
-    test_farm_count = max(1, len(farm_ids) // 5)
-    test_farms = set(farm_ids[:test_farm_count])
-    
-    train_records = [r for r in records if r["farm_id"] not in test_farms]
-    test_records = [r for r in records if r["farm_id"] in test_farms]
+    print(f"\nTrain/test split (stratified):")
+    print(f"  Train: {len(train_records)} images")
+    print(f"  Test: {len(test_records)} images")
     
     train_ds = Dataset.from_list(train_records).cast_column("image", Image())
     test_ds = Dataset.from_list(test_records).cast_column("image", Image())
