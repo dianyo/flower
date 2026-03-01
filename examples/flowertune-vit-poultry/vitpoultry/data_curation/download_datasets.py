@@ -58,6 +58,12 @@ def download_zenodo(record_id: str, output_dir: Path) -> None:
     """Download dataset from Zenodo API."""
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    # Skip annotation-only files (YOLO object detection, segmentation masks)
+    SKIP_FILES = {
+        "imgObjDet_Yolo.zip",      # YOLO format annotations
+        "imgSegmentation.zip",     # Segmentation masks/annotations
+    }
+    
     # Check if already downloaded (look for image files)
     existing_images = list(output_dir.rglob("*.jpg")) + list(output_dir.rglob("*.jpeg")) + list(output_dir.rglob("*.png"))
     if existing_images:
@@ -73,6 +79,10 @@ def download_zenodo(record_id: str, output_dir: Path) -> None:
         file_url = file_info["links"]["self"]
         filename = file_info["key"]
         filepath = output_dir / filename
+
+        if filename in SKIP_FILES:
+            print(f"  Skipping {filename} (annotation file, not needed for classification)")
+            continue
 
         if filepath.exists():
             print(f"  Skipping {filename} (already exists)")
