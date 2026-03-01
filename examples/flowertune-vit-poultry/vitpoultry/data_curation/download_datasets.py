@@ -27,12 +27,16 @@ ROBOFLOW_DATASETS = [
         "project": "disease-images-fecal",
         "version": 2,
         "description": "Fecal Disease Images (main dataset)",
+        "format": "folder",  # Classification project
+        "project_type": "classification",
     },
     {
         "workspace": "thesis-pr4oh",
         "project": "fecal-lbh0j",
         "version": 1,
         "description": "Fecal LBH0J (thesis dataset)",
+        "format": "coco",  # Object detection - download as COCO, extract images
+        "project_type": "object-detection",
     },
 ]
 
@@ -215,6 +219,8 @@ def download_roboflow(output_dir: Path, api_key: str = None) -> None:
         project_name = dataset_info["project"]
         version_num = dataset_info["version"]
         description = dataset_info["description"]
+        dl_format = dataset_info.get("format", "folder")
+        project_type = dataset_info.get("project_type", "classification")
         
         dataset_dir = output_dir / f"{workspace}_{project_name}"
         
@@ -226,14 +232,19 @@ def download_roboflow(output_dir: Path, api_key: str = None) -> None:
         print(f"    Workspace: {workspace}")
         print(f"    Project: {project_name}")
         print(f"    Version: {version_num}")
+        print(f"    Format: {dl_format} ({project_type})")
         
         try:
             project = rf.workspace(workspace).project(project_name)
             version = project.version(version_num)
             
-            # Download to a temp location, then move
-            dataset = version.download("folder", location=str(dataset_dir))
+            dataset = version.download(dl_format, location=str(dataset_dir))
             print(f"    ✓ Downloaded to: {dataset_dir}")
+            
+            # For object detection datasets, reorganize images by class for classification
+            if project_type == "object-detection":
+                print(f"    Note: Object detection dataset - images can be used for classification")
+                print(f"    Images are in: {dataset_dir}/train/, {dataset_dir}/valid/, {dataset_dir}/test/")
             
         except Exception as e:
             print(f"    ✗ Error downloading {project_name}: {e}")
