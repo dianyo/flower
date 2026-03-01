@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 DATA_DIR = Path("raw_data")
 
-ROBOFLOW_API_KEY = "LDLTxPHRFk7PxGYidEfa"
+ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_KEY")
 
 ROBOFLOW_DATASETS = [
     {
@@ -79,10 +79,22 @@ def download_zenodo(record_id: str, output_dir: Path) -> None:
 
 def download_huggingface(dataset_name: str, output_dir: Path):
     """Download existing HuggingFace dataset."""
+    save_path = output_dir / dataset_name.replace("/", "_")
+    
+    # Check if already downloaded locally
+    if save_path.exists() and (save_path / "dataset_info.json").exists():
+        print(f"\nSkipping {dataset_name} (already exists at {save_path})")
+        try:
+            from datasets import load_from_disk
+            ds = load_from_disk(str(save_path))
+            for split_name, split_ds in ds.items():
+                print(f"  {split_name}: {len(split_ds)} samples")
+            return ds
+        except Exception:
+            pass  # Fall through to re-download
+    
     print(f"\nDownloading {dataset_name} from HuggingFace...")
     ds = load_dataset(dataset_name)
-
-    save_path = output_dir / dataset_name.replace("/", "_")
     ds.save_to_disk(str(save_path))
     print(f"  Saved to {save_path}")
 
