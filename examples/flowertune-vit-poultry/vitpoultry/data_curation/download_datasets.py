@@ -53,6 +53,13 @@ def download_file(url: str, filepath: Path, desc: str = None) -> None:
 def download_zenodo(record_id: str, output_dir: Path) -> None:
     """Download dataset from Zenodo API."""
     output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Check if already downloaded (look for image files)
+    existing_images = list(output_dir.rglob("*.jpg")) + list(output_dir.rglob("*.jpeg")) + list(output_dir.rglob("*.png"))
+    if existing_images:
+        print(f"\nSkipping Zenodo {record_id} (found {len(existing_images)} images in {output_dir})")
+        return
+    
     url = f"https://zenodo.org/api/records/{record_id}"
     resp = requests.get(url).json()
 
@@ -111,6 +118,18 @@ def download_mendeley_nigeria(output_dir: Path) -> None:
     This is the source for Dianyo/poultry-health (which may be partial).
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Check if already downloaded (manually or previously)
+    # Look for image files in the directory
+    existing_images = list(output_dir.rglob("*.jpg")) + list(output_dir.rglob("*.jpeg")) + list(output_dir.rglob("*.png"))
+    if existing_images:
+        print(f"\nSkipping Mendeley download (found {len(existing_images)} images in {output_dir})")
+        
+        # Show folder structure
+        subdirs = [d.name for d in output_dir.iterdir() if d.is_dir()]
+        if subdirs:
+            print(f"  Folders: {', '.join(subdirs[:5])}{'...' if len(subdirs) > 5 else ''}")
+        return
     
     # Mendeley Data API endpoint for this dataset
     # The dataset has multiple versions, we want v1
