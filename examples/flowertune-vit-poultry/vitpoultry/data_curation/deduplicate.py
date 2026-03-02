@@ -23,6 +23,9 @@ LOGS_DIR = Path("logs")
 HASH_SIZE = 16
 HASH_THRESHOLD = 5
 
+# Only deduplicate 4-class sources (binary Mendeley data is used raw)
+SOURCES_TO_DEDUPLICATE = ["zenodo_farm", "zenodo_lab", "roboflow"]
+
 
 def get_image_metadata(image_path: Path) -> dict:
     """Get metadata for an image file."""
@@ -138,12 +141,28 @@ def find_near_duplicates(
     return near_dupe_count
 
 
-def collect_images(data_dir: Path) -> list[Path]:
-    """Collect all image files from subdirectories."""
+def collect_images(data_dir: Path, sources: list[str] | None = None) -> list[Path]:
+    """Collect image files from subdirectories.
+    
+    Args:
+        data_dir: Root directory containing source folders
+        sources: List of source folder names to include. If None, include all.
+    """
     extensions = ["*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG"]
     images = []
-    for ext in extensions:
-        images.extend(data_dir.rglob(ext))
+    
+    if sources:
+        # Only collect from specified sources
+        for source in sources:
+            source_dir = data_dir / source
+            if source_dir.exists():
+                for ext in extensions:
+                    images.extend(source_dir.rglob(ext))
+    else:
+        # Collect from all subdirectories
+        for ext in extensions:
+            images.extend(data_dir.rglob(ext))
+    
     return images
 
 
@@ -368,15 +387,18 @@ def generate_deduplication_report(
 def main():
     """Main deduplication routine."""
     print("=" * 60)
-    print("IMAGE DEDUPLICATION")
+    print("IMAGE DEDUPLICATION (4-class sources only)")
     print("=" * 60)
 
     if not RAW_DATA_DIR.exists():
         print(f"Error: {RAW_DATA_DIR} not found. Run download_datasets.py first.")
         return
 
+    print(f"\nSources to deduplicate: {SOURCES_TO_DEDUPLICATE}")
+    print("(Mendeley binary data is excluded - used raw for binary dataset)")
+    
     print(f"\nScanning {RAW_DATA_DIR} for images...")
-    images = collect_images(RAW_DATA_DIR)
+    images = collect_images(RAW_DATA_DIR, sources=SOURCES_TO_DEDUPLICATE)
     print(f"Found {len(images)} images")
 
     if not images:
