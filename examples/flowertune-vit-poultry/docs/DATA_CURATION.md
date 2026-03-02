@@ -197,6 +197,94 @@ Perceptual hashing removes:
 - Exact duplicates (same image from multiple sources)
 - Near-duplicates (slightly modified versions, resized copies)
 
+## Deduplication Results
+
+### Summary Statistics
+
+| Metric | Value |
+|--------|-------|
+| Images scanned | 16,513 |
+| Unique images retained | 8,770 |
+| Duplicates removed | 7,743 |
+| Duplicate groups | 6,666 |
+| **Deduplication rate** | **46.89%** |
+
+### Cross-Dataset Analysis
+
+A key finding is the significant overlap between datasets:
+
+| Analysis | Count |
+|----------|-------|
+| Cross-source duplicates | 6,831 |
+| Cross-label duplicates | 19 |
+
+**Key insight**: Nearly half (46.89%) of the combined raw data consists of duplicate images. The majority of duplicates (6,831) are **cross-source**, meaning the same images appear in both Zenodo and Roboflow datasets. This confirms that the Roboflow datasets were likely derived from the original Zenodo data.
+
+### Impact by Source
+
+| Source | In Duplicate Groups (kept) | Removed | Unique (not in any group) |
+|--------|---------------------------|---------|---------------------------|
+| zenodo_farm | 5,933 | 318 | ~559 |
+| zenodo_lab | 35 | 35 | ~1,185 |
+| roboflow | 698 | 7,390 | ~358 |
+
+**Observations**:
+1. **Roboflow heavily duplicated**: 7,390 of ~8,446 Roboflow images were duplicates, mostly of Zenodo images
+2. **Zenodo FARM has internal duplicates**: 318 images within zenodo_farm were duplicates of other zenodo_farm images
+3. **Zenodo LAB mostly unique**: Only 70 zenodo_lab images involved in duplicates; the PCR-confirmed dataset is largely distinct
+
+### Duplicate Pattern Analysis
+
+The deduplication report reveals several patterns:
+
+#### 1. Roboflow as Resized Zenodo Data
+Most duplicate groups follow this pattern:
+- **Canonical (kept)**: High-resolution Zenodo image (e.g., 1440×3200, ~1.5MB)
+- **Duplicates (removed)**: Multiple 640×640 Roboflow versions (~50-100KB each)
+
+Example (Group 1):
+```
+KEPT: zenodo_farm/salmo/salmo/salmo.1702.jpg (1440×3200, 1457KB)
+REMOVED: 7 duplicates including:
+  - zenodo_farm copies (same resolution)
+  - roboflow/thesis-pr4oh_fecal-lbh0j versions (640×640, ~76KB)
+  - roboflow classification versions (640×640)
+```
+
+#### 2. Zenodo Internal Duplicates
+Some images appear multiple times within the Zenodo FARM dataset with different filenames:
+```
+Example: salmo.1702.jpg = salmo.546.jpg = salmo.93.jpg (identical content)
+```
+
+#### 3. Cross-Label Duplicates (Potential Labeling Issues)
+19 duplicate groups contain images with **different class labels** - these may indicate annotation errors in the source datasets and warrant manual review.
+
+### Algorithm Details
+
+The deduplication uses dual perceptual hashing for robustness:
+
+```python
+HASH_SIZE = 16          # 256-bit hash
+HASH_THRESHOLD = 5      # Maximum Hamming distance for near-duplicates
+
+# For each image pair:
+if ahash_distance <= 5 AND phash_distance <= 5:
+    mark_as_duplicate()
+```
+
+- **Average Hash (aHash)**: Captures overall brightness patterns
+- **Perceptual Hash (pHash)**: Captures frequency-domain features via DCT
+
+This combination catches both exact duplicates (distance=0) and near-duplicates (resized, recompressed, or slightly modified versions).
+
+### Implications for Research
+
+1. **Dataset quality**: Without deduplication, models could memorize duplicated samples, leading to inflated accuracy metrics
+2. **Train/test leakage**: Cross-source duplicates could appear in both train and test sets if not removed
+3. **Source attribution**: The Roboflow datasets appear to be augmented/resized versions of Zenodo data rather than independent collections
+4. **Final dataset size**: After deduplication, the effective 4-class dataset is ~8,770 unique images (vs. 16,513 raw)
+
 ## Output Directory Structure
 
 ```
@@ -265,4 +353,5 @@ python -m vitpoultry.data_curation.upload_to_hf --dataset 4class
 
 - **v1**: Initial dataset from Zenodo LAB data only
 - **v2**: Added Roboflow datasets, COCO conversion, deduplication pipeline
-- **v3**: Added farm-based splits for realistic FL evaluation
+- **v3**: Added Zenodo FARM data (record 4628934), comprehensive deduplication analysis
+- **v4**: Corrected: No farm_id metadata available; using synthetic partitioning for FL simulation
