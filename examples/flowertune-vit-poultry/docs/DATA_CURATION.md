@@ -218,7 +218,9 @@ A key finding is the significant overlap between datasets:
 | Cross-source duplicates | 6,831 |
 | Cross-label duplicates | 19 |
 
-**Key insight**: Nearly half (46.89%) of the combined raw data consists of duplicate images. The majority of duplicates (6,831) are **cross-source**, meaning the same images appear in both Zenodo and Roboflow datasets. This confirms that the Roboflow datasets were likely derived from the original Zenodo data.
+**Key insight**: Nearly half (46.89%) of the combined raw data consists of duplicate images. The majority of duplicates (6,831) are **cross-source**, meaning the same images appear in both Zenodo and Roboflow datasets.
+
+**Critical finding**: **77.4% of Roboflow images** (6,540 of 8,446) are duplicates of Zenodo images. This confirms that the Roboflow datasets were derived from the original Zenodo data, not independently collected.
 
 ### Impact by Source
 
@@ -229,9 +231,11 @@ A key finding is the significant overlap between datasets:
 | roboflow | 698 | 7,390 | ~358 |
 
 **Observations**:
-1. **Roboflow heavily duplicated**: 7,390 of ~8,446 Roboflow images were duplicates, mostly of Zenodo images
-2. **Zenodo FARM has internal duplicates**: 318 images within zenodo_farm were duplicates of other zenodo_farm images
-3. **Zenodo LAB mostly unique**: Only 70 zenodo_lab images involved in duplicates; the PCR-confirmed dataset is largely distinct
+1. **Roboflow heavily duplicated**: 87.5% of Roboflow images (7,390 of 8,446) were removed as duplicates
+   - 77.4% (6,540) were duplicates of Zenodo images
+   - 10.1% (850) were internal Roboflow duplicates
+2. **Zenodo FARM has internal duplicates**: **4.67%** of zenodo_farm (318 of 6,812) were internal duplicates (same image with different filenames)
+3. **Zenodo LAB mostly unique**: Only 5.6% (70 of 1,255) zenodo_lab images involved in duplicates; the PCR-confirmed dataset is largely distinct
 
 ### Duplicate Pattern Analysis
 
@@ -251,11 +255,12 @@ REMOVED: 7 duplicates including:
   - roboflow classification versions (640×640)
 ```
 
-#### 2. Zenodo Internal Duplicates
-Some images appear multiple times within the Zenodo FARM dataset with different filenames:
+#### 2. Zenodo Internal Duplicates (4.67% of FARM data)
+318 images appear multiple times within the Zenodo FARM dataset with different filenames, across 260 duplicate groups:
 ```
-Example: salmo.1702.jpg = salmo.546.jpg = salmo.93.jpg (identical content)
+Example: salmo.1702.jpg = salmo.546.jpg = salmo.93.jpg (identical content, 1440×3200, 1.5MB each)
 ```
+This suggests potential collection/organization issues in the original dataset.
 
 #### 3. Cross-Label Duplicates (Potential Labeling Issues)
 19 duplicate groups contain images with **different class labels** - these may indicate annotation errors in the source datasets and warrant manual review.
