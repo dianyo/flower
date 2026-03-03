@@ -110,16 +110,43 @@ flwr run . <SUPERLINK-CONNECTION> --stream
 
 > **Tip:** Follow this [how-to guide](https://flower.ai/docs/framework/how-to-run-flower-with-deployment-engine.html) to run the same app in this example but with Flower's Deployment Engine. After that, you might be interested in setting up [secure TLS-enabled communications](https://flower.ai/docs/framework/how-to-enable-tls-connections.html) and [SuperNode authentication](https://flower.ai/docs/framework/how-to-authenticate-supernodes.html) in your federation.
 
+## Running Experiments
+
+Use the automated experiment runner to systematically run all experiments with wandb logging:
+
+```bash
+source dev.env  # Load API keys (WANDB_API_KEY, HF_TOKEN)
+
+# List all available experiments
+python scripts/run_experiments.py --list
+
+# Run baseline experiments (centralized + single-farm)
+python scripts/run_experiments.py --phases baseline --wandb --batch-size 256
+
+# Run federated learning experiments  
+python scripts/run_experiments.py --phases federated --wandb --batch-size 256
+
+# Run ALL experiments
+python scripts/run_experiments.py --phases all --wandb --batch-size 256
+
+# Run a specific experiment
+python scripts/run_experiments.py --experiment centralized_vit --wandb --batch-size 256
+```
+
+Results are saved to `experiment_results/<timestamp>/` with JSON, CSV, and individual logs.
+
+See [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) for the complete experiment guide.
+
 ## Baselines
 
 Establish upper and lower performance bounds before FL experiments:
 
 ```bash
-# Centralized baseline (upper bound)
-python -m vitpoultry.centralized_baseline --epochs 10
+# Centralized baseline (upper bound) - with wandb logging
+python -m vitpoultry.centralized_baseline --epochs 10 --batch-size 256 --wandb
 
 # Single-farm baseline (lower bound)
-python -m vitpoultry.single_farm_baseline --partition-id 0
+python -m vitpoultry.single_farm_baseline --partition-id 0 --batch-size 256 --wandb
 ```
 
 ## Model Interpretability

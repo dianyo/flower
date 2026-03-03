@@ -2,6 +2,57 @@
 
 This document outlines the complete experimental pipeline for evaluating federated learning approaches on the poultry fecal disease classification task.
 
+## Quick Start: Automated Experiment Runner
+
+```bash
+cd examples/flowertune-vit-poultry
+source .venv/bin/activate
+source dev.env  # Load WANDB_API_KEY, HF_TOKEN
+
+# List all available experiments
+python scripts/run_experiments.py --list
+
+# Run baseline experiments (centralized + single-farm)
+python scripts/run_experiments.py --phases baseline --wandb --batch-size 256
+
+# Run federated learning experiments
+python scripts/run_experiments.py --phases federated --wandb --batch-size 256
+
+# Run ablation studies
+python scripts/run_experiments.py --phases ablation --wandb --batch-size 256
+
+# Run ALL experiments
+python scripts/run_experiments.py --phases all --wandb --batch-size 256
+
+# Run a specific experiment
+python scripts/run_experiments.py --experiment centralized_vit --wandb --batch-size 256
+
+# Dry run (preview without executing)
+python scripts/run_experiments.py --phases all --dry-run
+```
+
+### Script Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--phases` | Which phases to run: `baseline`, `federated`, `ablation`, `all` | `all` |
+| `--experiment` | Run a specific experiment by name | - |
+| `--wandb` | Enable Weights & Biases logging | disabled |
+| `--batch-size` | Batch size for training (use 256+ for A100) | 128 |
+| `--timeout` | Timeout per experiment in seconds | 3600 |
+| `--output-dir` | Directory for results | `experiment_results` |
+| `--list` | List all available experiments | - |
+| `--dry-run` | Show what would run without executing | - |
+
+### Results Output
+
+Results are saved to `experiment_results/<timestamp>/`:
+- `results.json` - Full results with metrics and logs
+- `results_summary.csv` - Summary table for quick analysis
+- `<experiment_name>.log` - Individual experiment logs
+
+---
+
 ## Prerequisites
 
 ```bash
