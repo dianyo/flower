@@ -2,7 +2,7 @@
 """Automated experiment runner with wandb logging.
 
 Usage:
-    python scripts/run_experiments.py --phases all --wandb --batch-size 128
+    python scripts/run_experiments.py --phases all --wandb --batch-size 256
     python scripts/run_experiments.py --phases baseline --wandb
     python scripts/run_experiments.py --experiment centralized_vit --wandb
     python scripts/run_experiments.py --list
@@ -44,7 +44,7 @@ class ExperimentResult:
 def get_experiments(use_wandb=False, batch_size=128):
     """Generate experiment configs with optional wandb flag."""
     wandb_flag = ["--wandb"] if use_wandb else []
-    wandb_fl = "wandb=true" if use_wandb else ""
+    wandb_fl = "wandb=true" if use_wandb else "wandb=false"
     bs = str(batch_size)
     
     return {
@@ -85,11 +85,12 @@ def get_experiments(use_wandb=False, batch_size=128):
                      "--partition-id", "0", "--partitioning", "dirichlet", "--dirichlet-alpha", "0.5"] + wandb_flag,
             description="Single client training with Dirichlet partition",
         ),
+        # FL experiments - note: string values must be quoted for TOML parsing
         "fl_fedavg_iid_vit": ExperimentConfig(
             name="fl_fedavg_iid_vit",
             phase="federated",
             command=["flwr", "run", ".", "--run-config",
-                     f"strategy=fedavg partitioning=iid model-name=vit_b_16 num-server-rounds=10 batch-size={batch_size} {wandb_fl}".strip()],
+                     f'strategy="fedavg" partitioning="iid" model-name="vit_b_16" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
             description="FedAvg with IID partitioning and ViT",
             is_flwr=True,
         ),
@@ -97,7 +98,7 @@ def get_experiments(use_wandb=False, batch_size=128):
             name="fl_fedavg_dirichlet_vit",
             phase="federated",
             command=["flwr", "run", ".", "--run-config",
-                     f"strategy=fedavg partitioning=dirichlet dirichlet-alpha=0.5 model-name=vit_b_16 num-server-rounds=10 batch-size={batch_size} {wandb_fl}".strip()],
+                     f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
             description="FedAvg with Dirichlet partitioning and ViT",
             is_flwr=True,
         ),
@@ -105,7 +106,7 @@ def get_experiments(use_wandb=False, batch_size=128):
             name="fl_fedavg_dirichlet_mobilevit",
             phase="federated",
             command=["flwr", "run", ".", "--run-config",
-                     f"strategy=fedavg partitioning=dirichlet dirichlet-alpha=0.5 model-name=mobilevit_s num-server-rounds=10 batch-size={batch_size} {wandb_fl}".strip()],
+                     f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="mobilevit_s" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
             description="FedAvg with Dirichlet and MobileViT",
             is_flwr=True,
         ),
@@ -113,7 +114,7 @@ def get_experiments(use_wandb=False, batch_size=128):
             name="fl_fedavg_dirichlet_swin",
             phase="federated",
             command=["flwr", "run", ".", "--run-config",
-                     f"strategy=fedavg partitioning=dirichlet dirichlet-alpha=0.5 model-name=swin_tiny num-server-rounds=10 batch-size={batch_size} {wandb_fl}".strip()],
+                     f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="swin_tiny" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
             description="FedAvg with Dirichlet and Swin-Tiny",
             is_flwr=True,
         ),
@@ -121,7 +122,7 @@ def get_experiments(use_wandb=False, batch_size=128):
             name="fl_fedprox_dirichlet_vit_mu01",
             phase="federated",
             command=["flwr", "run", ".", "--run-config",
-                     f"strategy=fedprox proximal-mu=0.1 partitioning=dirichlet dirichlet-alpha=0.5 model-name=vit_b_16 num-server-rounds=10 batch-size={batch_size} {wandb_fl}".strip()],
+                     f'strategy="fedprox" proximal-mu=0.1 partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
             description="FedProx (mu=0.1) with Dirichlet and ViT",
             is_flwr=True,
         ),
@@ -129,7 +130,7 @@ def get_experiments(use_wandb=False, batch_size=128):
             name="fl_fedprox_dirichlet_vit_mu05",
             phase="federated",
             command=["flwr", "run", ".", "--run-config",
-                     f"strategy=fedprox proximal-mu=0.5 partitioning=dirichlet dirichlet-alpha=0.5 model-name=vit_b_16 num-server-rounds=10 batch-size={batch_size} {wandb_fl}".strip()],
+                     f'strategy="fedprox" proximal-mu=0.5 partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
             description="FedProx (mu=0.5) with Dirichlet and ViT",
             is_flwr=True,
         ),
@@ -137,7 +138,7 @@ def get_experiments(use_wandb=False, batch_size=128):
             name="fl_fedprox_dirichlet_vit_mu10",
             phase="federated",
             command=["flwr", "run", ".", "--run-config",
-                     f"strategy=fedprox proximal-mu=1.0 partitioning=dirichlet dirichlet-alpha=0.5 model-name=vit_b_16 num-server-rounds=10 batch-size={batch_size} {wandb_fl}".strip()],
+                     f'strategy="fedprox" proximal-mu=1.0 partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
             description="FedProx (mu=1.0) with Dirichlet and ViT",
             is_flwr=True,
         ),
@@ -145,7 +146,7 @@ def get_experiments(use_wandb=False, batch_size=128):
             name="ablation_alpha_01",
             phase="ablation",
             command=["flwr", "run", ".", "--run-config",
-                     f"strategy=fedavg partitioning=dirichlet dirichlet-alpha=0.1 model-name=vit_b_16 num-server-rounds=10 batch-size={batch_size} {wandb_fl}".strip()],
+                     f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.1 model-name="vit_b_16" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
             description="Ablation: Dirichlet alpha=0.1 (highly non-IID)",
             is_flwr=True,
         ),
@@ -153,7 +154,7 @@ def get_experiments(use_wandb=False, batch_size=128):
             name="ablation_alpha_10",
             phase="ablation",
             command=["flwr", "run", ".", "--run-config",
-                     f"strategy=fedavg partitioning=dirichlet dirichlet-alpha=1.0 model-name=vit_b_16 num-server-rounds=10 batch-size={batch_size} {wandb_fl}".strip()],
+                     f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=1.0 model-name="vit_b_16" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
             description="Ablation: Dirichlet alpha=1.0 (less non-IID)",
             is_flwr=True,
         ),
@@ -161,7 +162,7 @@ def get_experiments(use_wandb=False, batch_size=128):
             name="ablation_rounds_20",
             phase="ablation",
             command=["flwr", "run", ".", "--run-config",
-                     f"strategy=fedavg partitioning=dirichlet dirichlet-alpha=0.5 model-name=vit_b_16 num-server-rounds=20 batch-size={batch_size} {wandb_fl}".strip()],
+                     f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=20 batch-size={batch_size} {wandb_fl}'],
             description="Ablation: 20 server rounds",
             is_flwr=True,
         ),
@@ -290,7 +291,11 @@ def main():
     for e in exps: print(f"  - {e.name}")
     
     if args.dry_run:
-        print("\n[DRY RUN]"); return
+        print("\n[DRY RUN] Commands that would be executed:")
+        for e in exps:
+            print(f"\n  {e.name}:")
+            print(f"    {' '.join(e.command)}")
+        return
     
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_dir = Path(args.output_dir) / ts
