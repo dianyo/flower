@@ -21,6 +21,7 @@ dependencies = [
     "tqdm>=4.66.0",
     "huggingface_hub>=0.20.0",
     "roboflow>=1.1.0",
+    "wandb>=0.16.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -44,4 +45,5 @@ strategy = "fedavg"
 proximal-mu = 0.1
 partitioning = "iid"
 dirichlet-alpha = 0.5
+wandb = false
 
