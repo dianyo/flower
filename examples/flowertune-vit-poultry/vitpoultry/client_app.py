@@ -127,7 +127,8 @@ def train(msg: Message, context: Context):
         )
 
     trainloader = DataLoader(
-        trainset, batch_size=batch_size, num_workers=2, shuffle=True
+        trainset, batch_size=batch_size, shuffle=True,
+        num_workers=8, pin_memory=True, prefetch_factor=4
     )
 
     model = get_model(num_classes, model_name)

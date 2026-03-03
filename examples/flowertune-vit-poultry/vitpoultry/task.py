@@ -1,6 +1,7 @@
 """vitpoultry: Model, training, and dataset partitioning utilities."""
 
 import torch
+from tqdm import tqdm
 from datasets import load_from_disk
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import DirichletPartitioner, IidPartitioner
@@ -75,7 +76,7 @@ def trainer(net, trainloader, optimizer, epochs, device: torch.device | str):
     total_loss = 0.0
     total_samples = 0
     for _ in range(epochs):
-        for batch in trainloader:
+        for batch in tqdm(trainloader, desc="Training"):
             images, labels = batch["image"].to(device), batch["label"].to(device)
             optimizer.zero_grad()
             loss = criterion(net(images), labels)
