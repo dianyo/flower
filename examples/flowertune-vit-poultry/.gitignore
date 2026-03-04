@@ -10,3 +10,10 @@ wandb/
 dev.env
 .env
 demo_data/
+
+# Data directories (too large for git)
+raw_data/
+deduplicated_data/
+
+# Experiment results (can be regenerated)
+experiment_results/
