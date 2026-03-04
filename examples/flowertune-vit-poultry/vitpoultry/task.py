@@ -68,6 +68,21 @@ def get_model(num_classes: int, model_name: str = "vit_b_16"):
     return model
 
 
+def get_finetune_layers(model, model_name: str = "vit_b_16"):
+    """Get the finetune layers (classification head) for a model.
+    
+    Different model architectures have different attribute names for the head:
+    - vit_b_16: model.heads
+    - mobilevit_s, swin_tiny: model.head
+    """
+    if model_name == "vit_b_16":
+        return model.heads
+    elif model_name in ["mobilevit_s", "swin_tiny"]:
+        return model.head
+    else:
+        raise ValueError(f"Unknown model: {model_name}")
+
+
 def trainer(net, trainloader, optimizer, epochs, device: torch.device | str):
     """Train the model on the training set."""
     criterion = torch.nn.CrossEntropyLoss()

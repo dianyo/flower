@@ -15,7 +15,7 @@ try:
 except ImportError:
     WANDB_AVAILABLE = False
 
-from vitpoultry.task import apply_eval_transforms, get_model, test
+from vitpoultry.task import apply_eval_transforms, get_finetune_layers, get_model, test
 
 app = ServerApp()
 
@@ -69,7 +69,7 @@ def main(grid: Grid, context: Context) -> None:
         _wandb_initialized = True
 
     model = get_model(num_classes, model_name)
-    finetune_layers = model.heads
+    finetune_layers = get_finetune_layers(model, model_name)
     arrays = ArrayRecord(finetune_layers.state_dict())
 
     if strategy_name == "fedavg":
@@ -119,7 +119,7 @@ def get_evaluate_fn(
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         model = get_model(num_classes, model_name)
-        finetune_layers = model.heads
+        finetune_layers = get_finetune_layers(model, model_name)
         finetune_layers.load_state_dict(arrays.to_torch_state_dict(), strict=True)
         model.to(device)
 

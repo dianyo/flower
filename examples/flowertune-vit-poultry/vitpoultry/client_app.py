@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 from vitpoultry.task import (
     apply_train_transforms,
     get_dataset_partition,
+    get_finetune_layers,
     get_model,
     load_local_data,
 )
@@ -132,7 +133,7 @@ def train(msg: Message, context: Context):
     )
 
     model = get_model(num_classes, model_name)
-    finetune_layers = model.heads
+    finetune_layers = get_finetune_layers(model, model_name)
     global_state_dict = msg.content["arrays"].to_torch_state_dict()
     finetune_layers.load_state_dict(global_state_dict, strict=True)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
