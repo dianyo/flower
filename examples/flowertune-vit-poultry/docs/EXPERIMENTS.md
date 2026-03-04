@@ -29,6 +29,9 @@ python scripts/run_experiments.py --experiment centralized_vit --wandb --batch-s
 
 # Dry run (preview without executing)
 python scripts/run_experiments.py --phases all --dry-run
+
+# Skip already completed experiments (checks experiment_results/)
+python scripts/run_experiments.py --phases all --wandb --skip-completed
 ```
 
 ### Script Options
@@ -43,6 +46,7 @@ python scripts/run_experiments.py --phases all --dry-run
 | `--output-dir` | Directory for results | `experiment_results` |
 | `--list` | List all available experiments | - |
 | `--dry-run` | Show what would run without executing | - |
+| `--skip-completed` | Skip experiments already in results | - |
 
 ### Results Output
 
@@ -63,6 +67,26 @@ source .venv/bin/activate
 Ensure the dataset is uploaded to HuggingFace:
 - **4-class dataset**: `Dianyo/poultry-fecal-fl` (8,770 unique images after deduplication)
 
+---
+
+## Model Zoo (<100M Parameters for Edge Deployment)
+
+All models are selected for edge deployment feasibility (farm/mobile devices).
+
+| Model | Params | FLOPs | Image Size | Notes |
+|-------|--------|-------|------------|-------|
+| `vit_b_16` | 86M | 17.6G | 224×224 | Baseline ViT |
+| `vit_s_16` | 22M | 4.6G | 224×224 | Small ViT (efficient) |
+| `swin_tiny` | 28M | 4.5G | 224×224 | Swin Transformer Tiny |
+| `swin_small` | 50M | 8.7G | 224×224 | Swin Transformer Small |
+| `mobilevit_s` | 5.6M | 2.0G | 256×256 | MobileViT v1 Small |
+| `mobilevitv2_100` | 4.9M | 1.8G | 256×256 | MobileViT v2 (1.0×) - **Recommended** |
+| `mobilevitv2_150` | 10.6M | 4.0G | 256×256 | MobileViT v2 (1.5×) |
+
+**Recommended for Paper**: Focus on `vit_s_16`, `swin_tiny`, `mobilevitv2_100` for edge deployment story.
+
+---
+
 ## Experiment Overview
 
 We evaluate three training paradigms:
@@ -76,8 +100,9 @@ We evaluate three training paradigms:
 |----|----------|-------------|
 | RQ1 | Can FL match centralized performance? | Centralized vs FL-IID |
 | RQ2 | How does data heterogeneity affect FL? | FL-IID vs FL-NonIID |
-| RQ3 | Does FedProx help with Non-IID data? | FL-NonIID-FedAvg vs FL-NonIID-FedProx |
-| RQ4 | How do lightweight models compare? | ViT vs MobileViT vs Swin |
+| RQ3 | Which FL strategy works best for non-IID? | FedAvg vs FedProx vs FedAdam |
+| RQ4 | Which lightweight model is best for edge FL? | ViT-S vs Swin-T vs MobileViT-v2 |
+| RQ5 | Does convergence-based training improve results? | Fixed epochs vs early stopping |
 
 ---
 
@@ -87,51 +112,73 @@ We evaluate three training paradigms:
 
 Train on the full dataset without partitioning. This establishes the best possible accuracy.
 
+**All model variants:**
 ```bash
-python -m vitpoultry.centralized_baseline \
-    --dataset Dianyo/poultry-fecal-fl \
-    --model vit_b_16 \
-    --epochs 20 \
-    --batch-size 32 \
-    --lr 0.001
+# ViT-B-16 (reference)
+python -m vitpoultry.centralized_baseline --model vit_b_16 --epochs 20 --batch-size 256 --wandb
 
-# Expected output: Best accuracy, precision, recall, F1 per class
+# ViT-S-16 (edge-friendly)
+python -m vitpoultry.centralized_baseline --model vit_s_16 --epochs 20 --batch-size 256 --wandb
+
+# Swin Tiny
+python -m vitpoultry.centralized_baseline --model swin_tiny --epochs 20 --batch-size 256 --wandb
+
+# Swin Small
+python -m vitpoultry.centralized_baseline --model swin_small --epochs 20 --batch-size 256 --wandb
+
+# MobileViT v1 Small
+python -m vitpoultry.centralized_baseline --model mobilevit_s --epochs 20 --batch-size 256 --wandb
+
+# MobileViT v2 (1.0×) - Recommended
+python -m vitpoultry.centralized_baseline --model mobilevitv2_100 --epochs 20 --batch-size 256 --wandb
+
+# MobileViT v2 (1.5×)
+python -m vitpoultry.centralized_baseline --model mobilevitv2_150 --epochs 20 --batch-size 256 --wandb
 ```
 
-**Variants to run:**
+**With early stopping (convergence-based):**
 ```bash
-# MobileViT (lightweight)
-python -m vitpoultry.centralized_baseline --model mobilevit_s --epochs 20
-
-# Swin Transformer Tiny
-python -m vitpoultry.centralized_baseline --model swin_t --epochs 20
+python -m vitpoultry.centralized_baseline --model vit_b_16 --epochs 50 --early-stopping --patience 5 --wandb
 ```
 
-### 1.2 Single-Farm Baseline (Lower Bound)
+### 1.2 Single-Farm Baseline (Lower Bound) - All Splits
 
-Train on only one partition's data. This shows what happens without collaboration.
+Train on each partition's data separately to establish lower bound. **Run all partitions and report mean ± std.**
 
+**IID Partitioning (10 partitions):**
 ```bash
-# Run for multiple partitions to get variance
-for i in 0 1 2 3 4; do
+for i in {0..9}; do
     python -m vitpoultry.single_farm_baseline \
+        --model vit_b_16 \
         --partition-id $i \
-        --num-partitions 5 \
+        --num-partitions 10 \
         --epochs 20 \
-        --partitioning iid
+        --partitioning iid \
+        --wandb
 done
 ```
 
-**With Non-IID partitioning:**
+**Non-IID Dirichlet Partitioning (10 partitions, α=0.5):**
 ```bash
-for i in 0 1 2 3 4; do
+for i in {0..9}; do
     python -m vitpoultry.single_farm_baseline \
+        --model vit_b_16 \
         --partition-id $i \
-        --num-partitions 5 \
+        --num-partitions 10 \
         --epochs 20 \
         --partitioning dirichlet \
-        --dirichlet-alpha 0.5
+        --dirichlet-alpha 0.5 \
+        --wandb
 done
+```
+
+**Expected output format:**
+```
+Single-Farm Results (IID, 10 partitions):
+  Partition 0: 85.2%
+  Partition 1: 87.1%
+  ...
+  Mean ± Std: 86.3% ± 2.1%
 ```
 
 ---
@@ -140,123 +187,129 @@ done
 
 All FL experiments use the Flower framework via `flwr run`.
 
-### 2.1 FL with IID Data (Baseline FL)
+### 2.1 FL Strategies Comparison
 
-Uniform random partitioning - each client has balanced class distribution.
-
+#### FedAvg (Baseline)
 ```bash
-flwr run . --run-config "\
-    num-server-rounds=10 \
-    strategy='fedavg' \
-    partitioning='iid' \
-    model-name='vit_b_16' \
-    learning-rate=0.001 \
-    batch-size=32"
+# IID partitioning
+flwr run . --run-config 'strategy="fedavg" partitioning="iid" model-name="vit_b_16" num-server-rounds=10 batch-size=256 wandb=true'
+
+# Non-IID (Dirichlet α=0.5)
+flwr run . --run-config 'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 batch-size=256 wandb=true'
 ```
 
-### 2.2 FL with Non-IID Data (Dirichlet Partitioning)
+#### FedProx (with μ tuning)
 
-Heterogeneous data distribution simulating real-world farm differences.
+Previous experiments showed poor results with high μ values. **Use lower μ for vision tasks:**
 
-**FedAvg with moderate heterogeneity (α=0.5):**
 ```bash
-flwr run . --run-config "\
-    num-server-rounds=10 \
-    strategy='fedavg' \
-    partitioning='dirichlet' \
-    dirichlet-alpha=0.5 \
-    model-name='vit_b_16'"
+# μ = 0.001 (recommended starting point)
+flwr run . --run-config 'strategy="fedprox" proximal-mu=0.001 partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 wandb=true'
+
+# μ = 0.01
+flwr run . --run-config 'strategy="fedprox" proximal-mu=0.01 partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 wandb=true'
+
+# μ = 0.1 (already run - baseline)
+flwr run . --run-config 'strategy="fedprox" proximal-mu=0.1 partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 wandb=true'
 ```
 
-**FedAvg with high heterogeneity (α=0.1):**
+#### FedAdam (Adaptive Optimizer)
+
+Server-side adaptive optimization for better convergence:
+
 ```bash
-flwr run . --run-config "\
-    num-server-rounds=10 \
-    strategy='fedavg' \
-    partitioning='dirichlet' \
-    dirichlet-alpha=0.1 \
-    model-name='vit_b_16'"
+# Default FedAdam (η=0.1, β1=0.9, β2=0.99)
+flwr run . --run-config 'strategy="fedadam" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 wandb=true'
+
+# FedAdam with tuned server LR
+flwr run . --run-config 'strategy="fedadam" server-lr=0.01 partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 wandb=true'
 ```
 
-### 2.3 FedProx for Non-IID Data
+### 2.2 Convergence-Based FL
 
-FedProx adds a proximal term to handle data heterogeneity.
+Instead of fixed rounds, run until convergence:
 
 ```bash
-flwr run . --run-config "\
-    num-server-rounds=10 \
-    strategy='fedprox' \
-    proximal-mu=0.1 \
-    partitioning='dirichlet' \
-    dirichlet-alpha=0.5 \
-    model-name='vit_b_16'"
-```
-
-**Ablation on proximal-mu:**
-```bash
-# Lower regularization
-flwr run . --run-config "strategy='fedprox' proximal-mu=0.01 partitioning='dirichlet' dirichlet-alpha=0.5"
-
-# Higher regularization
-flwr run . --run-config "strategy='fedprox' proximal-mu=1.0 partitioning='dirichlet' dirichlet-alpha=0.5"
+# FedAvg with early stopping (max 30 rounds, patience 5)
+flwr run . --run-config 'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 num-server-rounds=30 early-stopping=true patience=5 wandb=true'
 ```
 
 ---
 
-## Phase 3: Model Architecture Comparison
+## Phase 3: Model Architecture Comparison (Edge Deployment Focus)
 
-Compare ViT variants for edge deployment feasibility.
+Compare models for edge deployment feasibility under FL.
 
-### 3.1 ViT-B-16 (Full-size baseline)
+### 3.1 Primary Models (<30M params)
+
 ```bash
-flwr run . --run-config "model-name='vit_b_16' strategy='fedavg' partitioning='iid'"
+# ViT-S-16 (22M params)
+flwr run . --run-config 'model-name="vit_s_16" strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 num-server-rounds=10 wandb=true'
+
+# Swin Tiny (28M params)
+flwr run . --run-config 'model-name="swin_tiny" strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 num-server-rounds=10 wandb=true'
+
+# MobileViT v2 1.0× (4.9M params) - Most efficient
+flwr run . --run-config 'model-name="mobilevitv2_100" strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 num-server-rounds=10 wandb=true'
 ```
 
-### 3.2 MobileViT-S (Lightweight)
-```bash
-flwr run . --run-config "model-name='mobilevit_s' strategy='fedavg' partitioning='iid'"
-```
+### 3.2 Extended Models (for ablation)
 
-### 3.3 Swin Transformer Tiny
 ```bash
-flwr run . --run-config "model-name='swin_t' strategy='fedavg' partitioning='iid'"
+# ViT-B-16 (86M params) - reference
+flwr run . --run-config 'model-name="vit_b_16" strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 num-server-rounds=10 wandb=true'
+
+# Swin Small (50M params)
+flwr run . --run-config 'model-name="swin_small" strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 num-server-rounds=10 wandb=true'
+
+# MobileViT v2 1.5× (10.6M params)
+flwr run . --run-config 'model-name="mobilevitv2_150" strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 num-server-rounds=10 wandb=true'
+
+# MobileViT v1 Small (5.6M params) - for comparison with v2
+flwr run . --run-config 'model-name="mobilevit_s" strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 num-server-rounds=10 wandb=true'
 ```
 
 ---
 
-## Phase 4: Extended Experiments
+## Phase 4: Ablation Studies
 
-### 4.1 Number of Clients Ablation
-
-Test with different numbers of simulated farms.
+### 4.1 Data Heterogeneity (Dirichlet α)
 
 ```bash
-# 3 clients
-flwr run . --run-config "num-server-rounds=10" local-num-partitions=3
+# High heterogeneity (α=0.1)
+flwr run . --run-config 'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.1 model-name="vit_b_16" num-server-rounds=10 wandb=true'
 
-# 5 clients (default)
-flwr run . --run-config "num-server-rounds=10" local-num-partitions=5
+# Moderate heterogeneity (α=0.5) - default
+flwr run . --run-config 'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 wandb=true'
 
-# 10 clients
-flwr run . --run-config "num-server-rounds=10" local-num-partitions=10
+# Low heterogeneity (α=1.0)
+flwr run . --run-config 'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=1.0 model-name="vit_b_16" num-server-rounds=10 wandb=true'
 ```
 
-### 4.2 Communication Rounds Ablation
+### 4.2 Number of Communication Rounds
 
 ```bash
-# Fewer rounds
-flwr run . --run-config "num-server-rounds=5 strategy='fedavg' partitioning='iid'"
+# 5 rounds
+flwr run . --run-config 'num-server-rounds=5 strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 wandb=true'
 
-# More rounds
-flwr run . --run-config "num-server-rounds=20 strategy='fedavg' partitioning='iid'"
+# 10 rounds (default)
+flwr run . --run-config 'num-server-rounds=10 strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 wandb=true'
+
+# 20 rounds
+flwr run . --run-config 'num-server-rounds=20 strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 wandb=true'
 ```
 
-### 4.3 Learning Rate Sensitivity
+### 4.3 Number of Clients
 
 ```bash
-flwr run . --run-config "learning-rate=0.0001 strategy='fedavg' partitioning='iid'"
-flwr run . --run-config "learning-rate=0.001 strategy='fedavg' partitioning='iid'"
-flwr run . --run-config "learning-rate=0.01 strategy='fedavg' partitioning='iid'"
+# 5 clients
+flwr run . --run-config 'num-server-rounds=10 strategy="fedavg"' --num-supernodes 5
+
+# 10 clients (default)
+flwr run . --run-config 'num-server-rounds=10 strategy="fedavg"' --num-supernodes 10
+
+# 20 clients
+flwr run . --run-config 'num-server-rounds=10 strategy="fedavg"' --num-supernodes 20
 ```
 
 ---
@@ -286,18 +339,101 @@ python -m vitpoultry.gradcam_viz \
 
 ## Experiment Matrix Summary
 
-| Exp ID | Training | Strategy | Partitioning | α | Model | Purpose |
-|--------|----------|----------|--------------|---|-------|---------|
-| C1 | Centralized | - | - | - | ViT-B-16 | Upper bound |
-| C2 | Centralized | - | - | - | MobileViT | Lightweight upper bound |
-| S1-S5 | Single-farm | - | IID | - | ViT-B-16 | Lower bound |
-| F1 | FL | FedAvg | IID | - | ViT-B-16 | FL baseline |
-| F2 | FL | FedAvg | Dirichlet | 0.5 | ViT-B-16 | Non-IID impact |
-| F3 | FL | FedAvg | Dirichlet | 0.1 | ViT-B-16 | High heterogeneity |
-| F4 | FL | FedProx | Dirichlet | 0.5 | ViT-B-16 | FedProx benefit |
-| F5 | FL | FedProx | Dirichlet | 0.1 | ViT-B-16 | FedProx under stress |
-| M1 | FL | FedAvg | IID | - | MobileViT | Lightweight FL |
-| M2 | FL | FedAvg | IID | - | Swin-T | Alternative arch |
+### Baseline Experiments
+
+| Exp ID | Type | Model | Params | Purpose |
+|--------|------|-------|--------|---------|
+| C1 | Centralized | vit_b_16 | 86M | Upper bound (reference) |
+| C2 | Centralized | vit_s_16 | 22M | Upper bound (edge) |
+| C3 | Centralized | swin_tiny | 28M | Upper bound (Swin) |
+| C4 | Centralized | swin_small | 50M | Upper bound (Swin-S) |
+| C5 | Centralized | mobilevit_s | 5.6M | Upper bound (MobileViT v1) |
+| C6 | Centralized | mobilevitv2_100 | 4.9M | Upper bound (MobileViT v2) |
+| C7 | Centralized | mobilevitv2_150 | 10.6M | Upper bound (MobileViT v2 1.5×) |
+
+### Single-Farm Experiments (All 10 Partitions)
+
+| Exp ID | Model | Partitioning | Purpose |
+|--------|-------|--------------|---------|
+| SF-IID-0..9 | vit_b_16 | IID | Lower bound (IID, mean±std) |
+| SF-DIR-0..9 | vit_b_16 | Dirichlet α=0.5 | Lower bound (Non-IID, mean±std) |
+
+### Federated Learning Experiments
+
+| Exp ID | Strategy | Model | Partitioning | μ/η | Purpose |
+|--------|----------|-------|--------------|-----|---------|
+| FL-AVG-IID | FedAvg | vit_b_16 | IID | - | FL baseline |
+| FL-AVG-DIR | FedAvg | vit_b_16 | Dirichlet 0.5 | - | Non-IID impact |
+| FL-PROX-001 | FedProx | vit_b_16 | Dirichlet 0.5 | μ=0.001 | FedProx tuned (low) |
+| FL-PROX-01 | FedProx | vit_b_16 | Dirichlet 0.5 | μ=0.01 | FedProx tuned (mid) |
+| FL-PROX-1 | FedProx | vit_b_16 | Dirichlet 0.5 | μ=0.1 | FedProx baseline |
+| FL-ADAM | FedAdam | vit_b_16 | Dirichlet 0.5 | η=0.1 | Adaptive FL |
+| FL-ADAM-LR | FedAdam | vit_b_16 | Dirichlet 0.5 | η=0.01 | FedAdam tuned |
+
+### Model Comparison (FL, FedAvg, Dirichlet α=0.5)
+
+| Exp ID | Model | Params | Purpose |
+|--------|-------|--------|---------|
+| M-VIT-B | vit_b_16 | 86M | Reference |
+| M-VIT-S | vit_s_16 | 22M | Edge ViT |
+| M-SWIN-T | swin_tiny | 28M | Swin Tiny |
+| M-SWIN-S | swin_small | 50M | Swin Small |
+| M-MVIT1 | mobilevit_s | 5.6M | MobileViT v1 |
+| M-MVIT2-100 | mobilevitv2_100 | 4.9M | MobileViT v2 (best efficiency) |
+| M-MVIT2-150 | mobilevitv2_150 | 10.6M | MobileViT v2 1.5× |
+
+### Ablation Studies
+
+| Exp ID | Variable | Values | Model | Purpose |
+|--------|----------|--------|-------|---------|
+| A-ALPHA | Dirichlet α | 0.1, 0.5, 1.0 | vit_b_16 | Heterogeneity impact |
+| A-ROUNDS | Rounds | 5, 10, 20 | vit_b_16 | Communication efficiency |
+| A-CLIENTS | Clients | 5, 10, 20 | vit_b_16 | Scalability |
+
+---
+
+## Completed Experiments (Skip List)
+
+The following experiments have been completed and can be skipped:
+
+### From Run 20260303_073511 (Baselines)
+- ✅ centralized_vit (94.87%)
+- ✅ centralized_mobilevit (85.18%)
+- ✅ centralized_swin (93.39%)
+- ✅ single_farm_vit_iid (partition 0 only, 89.05%)
+- ✅ single_farm_vit_dirichlet (partition 0 only, 86.32%)
+
+### From Run 20260304_053328 (Federated)
+- ✅ fl_fedavg_iid_vit (88.43%)
+- ✅ fl_fedavg_dirichlet_vit (88.77%)
+- ✅ fl_fedavg_dirichlet_swin (85.40%)
+- ✅ fl_fedavg_dirichlet_mobilevit (8.21% - needs re-eval with v2)
+- ✅ fl_fedprox_dirichlet_vit_mu01 (31.58% - μ=0.1, too high)
+- ✅ fl_fedprox_dirichlet_vit_mu05 (27.77% - μ=0.5, too high)
+- ✅ fl_fedprox_dirichlet_vit_mu10 (35.80% - μ=1.0, too high)
+
+---
+
+## Priority Experiments (TODO)
+
+### High Priority (Core Paper Results)
+1. [ ] Single-farm all splits (IID): partitions 1-9
+2. [ ] Single-farm all splits (Dirichlet): partitions 1-9
+3. [ ] FedProx with μ=0.001
+4. [ ] FedProx with μ=0.01
+5. [ ] FedAdam baseline
+6. [ ] MobileViT v2 centralized
+7. [ ] MobileViT v2 FL
+
+### Medium Priority (Extended Results)
+8. [ ] ViT-S-16 centralized + FL
+9. [ ] Swin Small centralized + FL
+10. [ ] Convergence-based training (early stopping)
+
+### Low Priority (Ablation)
+11. [ ] Dirichlet α=0.1, α=1.0
+12. [ ] Round ablation (5, 20 rounds)
+13. [ ] Client ablation (5, 20 clients)
 
 ---
 
@@ -306,7 +442,7 @@ python -m vitpoultry.gradcam_viz \
 Each experiment should log:
 
 ```
-Experiment: F2 (FL-FedAvg-NonIID-0.5)
+Experiment: FL-AVG-DIR (FL-FedAvg-NonIID-0.5)
 Model: vit_b_16
 Rounds: 10
 Final Test Accuracy: XX.XX%
@@ -324,30 +460,16 @@ Weighted F1: 0.XX
 
 ---
 
-## Results Collection Script
-
-To run all experiments and collect results:
-
-```bash
-# Create results directory
-mkdir -p results/experiments
-
-# Run all experiments (example)
-./scripts/run_all_experiments.sh 2>&1 | tee results/experiment_log.txt
-```
-
----
-
 ## Hardware Requirements
 
 - **GPU**: NVIDIA GPU with ≥8GB VRAM recommended
 - **RAM**: ≥16GB for data loading
 - **Storage**: ~5GB for dataset + results
 
-**Estimated run times (per experiment on single GPU):**
-- Centralized baseline: ~30-60 min
-- Single-farm baseline: ~10-20 min each
-- FL experiment (10 rounds): ~20-40 min
+**Estimated run times (per experiment on A100):**
+- Centralized baseline: ~10-15 min
+- Single-farm baseline: ~5-8 min each
+- FL experiment (10 rounds): ~8-10 min
 
 ---
 
@@ -356,13 +478,13 @@ mkdir -p results/experiments
 ### Out of Memory
 ```bash
 # Reduce batch size
-flwr run . --run-config "batch-size=16"
+flwr run . --run-config "batch-size=128"
 ```
 
 ### Slow Training
 ```bash
+# Increase num_workers in DataLoader
 # Use mixed precision (if supported)
-# Reduce image size in task.py transforms
 ```
 
 ### Dataset Loading Issues

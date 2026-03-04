@@ -6,7 +6,7 @@ import torch
 from datasets import Dataset, load_dataset
 from flwr.app import ArrayRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
-from flwr.serverapp.strategy import FedAvg, FedProx
+from flwr.serverapp.strategy import FedAdam, FedAvg, FedProx
 from torch.utils.data import DataLoader
 
 try:
@@ -44,12 +44,17 @@ def main(grid: Grid, context: Context) -> None:
     model_name = context.run_config.get("model-name", "vit_b_16")
     strategy_name = context.run_config.get("strategy", "fedavg")
     proximal_mu = context.run_config.get("proximal-mu", 0.1)
+    server_lr = context.run_config.get("server-lr", 0.1)
     partitioning = context.run_config.get("partitioning", "iid")
     dirichlet_alpha = context.run_config.get("dirichlet-alpha", 0.5)
     use_wandb = context.run_config.get("wandb", False)
 
     if use_wandb and WANDB_AVAILABLE and not _wandb_initialized:
         run_name = f"fl_{strategy_name}_{partitioning}_{model_name}"
+        if strategy_name == "fedprox":
+            run_name += f"_mu{proximal_mu}"
+        elif strategy_name == "fedadam":
+            run_name += f"_lr{server_lr}"
         wandb.init(
             project=os.environ.get("WANDB_PROJECT", "flowertune-vit-poultry"),
             name=run_name,
@@ -61,6 +66,7 @@ def main(grid: Grid, context: Context) -> None:
                 "partitioning": partitioning,
                 "dirichlet_alpha": dirichlet_alpha if partitioning == "dirichlet" else None,
                 "proximal_mu": proximal_mu if strategy_name == "fedprox" else None,
+                "server_lr": server_lr if strategy_name == "fedadam" else None,
                 "dataset": dataset_name,
                 "num_classes": num_classes,
             },
@@ -83,8 +89,14 @@ def main(grid: Grid, context: Context) -> None:
             fraction_evaluate=0.0,
             proximal_mu=proximal_mu,
         )
+    elif strategy_name == "fedadam":
+        strategy = FedAdam(
+            fraction_train=0.5,
+            fraction_evaluate=0.0,
+            eta=server_lr,
+        )
     else:
-        raise ValueError(f"Unknown strategy: {strategy_name}. Choose: fedavg, fedprox")
+        raise ValueError(f"Unknown strategy: {strategy_name}. Choose: fedavg, fedprox, fedadam")
 
     print(f"Starting FL with strategy={strategy_name}, model={model_name}")
     print(f"WandB: {'enabled' if (use_wandb and WANDB_AVAILABLE) else 'disabled'}")

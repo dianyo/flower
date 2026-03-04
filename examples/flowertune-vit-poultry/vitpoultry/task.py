@@ -32,7 +32,7 @@ def get_model(num_classes: int, model_name: str = "vit_b_16"):
 
     Args:
         num_classes: Number of output classes.
-        model_name: One of "vit_b_16", "mobilevit_s", "swin_tiny".
+        model_name: One of the supported models (see SUPPORTED_MODELS).
 
     Returns:
         Model with frozen backbone and trainable classification head.
@@ -44,6 +44,15 @@ def get_model(num_classes: int, model_name: str = "vit_b_16"):
         model.requires_grad_(False)
         model.heads.requires_grad_(True)
 
+    elif model_name == "vit_s_16":
+        if not TIMM_AVAILABLE:
+            raise ImportError("Install timm for ViT-S: pip install timm")
+        model = timm.create_model("vit_small_patch16_224", pretrained=True, num_classes=num_classes)
+        for param in model.parameters():
+            param.requires_grad = False
+        for param in model.head.parameters():
+            param.requires_grad = True
+
     elif model_name == "mobilevit_s":
         if not TIMM_AVAILABLE:
             raise ImportError("Install timm for MobileViT: pip install timm")
@@ -51,6 +60,24 @@ def get_model(num_classes: int, model_name: str = "vit_b_16"):
         for param in model.parameters():
             param.requires_grad = False
         for param in model.head.parameters():
+            param.requires_grad = True
+
+    elif model_name == "mobilevitv2_100":
+        if not TIMM_AVAILABLE:
+            raise ImportError("Install timm for MobileViT v2: pip install timm")
+        model = timm.create_model("mobilevitv2_100", pretrained=True, num_classes=num_classes)
+        for param in model.parameters():
+            param.requires_grad = False
+        for param in model.head.fc.parameters():
+            param.requires_grad = True
+
+    elif model_name == "mobilevitv2_150":
+        if not TIMM_AVAILABLE:
+            raise ImportError("Install timm for MobileViT v2: pip install timm")
+        model = timm.create_model("mobilevitv2_150", pretrained=True, num_classes=num_classes)
+        for param in model.parameters():
+            param.requires_grad = False
+        for param in model.head.fc.parameters():
             param.requires_grad = True
 
     elif model_name == "swin_tiny":
@@ -62,25 +89,49 @@ def get_model(num_classes: int, model_name: str = "vit_b_16"):
         for param in model.head.parameters():
             param.requires_grad = True
 
+    elif model_name == "swin_small":
+        if not TIMM_AVAILABLE:
+            raise ImportError("Install timm for Swin: pip install timm")
+        model = timm.create_model("swin_small_patch4_window7_224", pretrained=True, num_classes=num_classes)
+        for param in model.parameters():
+            param.requires_grad = False
+        for param in model.head.parameters():
+            param.requires_grad = True
+
     else:
-        raise ValueError(f"Unknown model: {model_name}. Choose: vit_b_16, mobilevit_s, swin_tiny")
+        supported = ["vit_b_16", "vit_s_16", "mobilevit_s", "mobilevitv2_100", "mobilevitv2_150", "swin_tiny", "swin_small"]
+        raise ValueError(f"Unknown model: {model_name}. Supported: {supported}")
 
     return model
+
+
+SUPPORTED_MODELS = {
+    "vit_b_16": {"params": "86M", "head_attr": "heads", "source": "torchvision"},
+    "vit_s_16": {"params": "22M", "head_attr": "head", "source": "timm"},
+    "mobilevit_s": {"params": "5.6M", "head_attr": "head", "source": "timm"},
+    "mobilevitv2_100": {"params": "4.9M", "head_attr": "head.fc", "source": "timm"},
+    "mobilevitv2_150": {"params": "10.6M", "head_attr": "head.fc", "source": "timm"},
+    "swin_tiny": {"params": "28M", "head_attr": "head", "source": "timm"},
+    "swin_small": {"params": "50M", "head_attr": "head", "source": "timm"},
+}
 
 
 def get_finetune_layers(model, model_name: str = "vit_b_16"):
     """Get the finetune layers (classification head) for a model.
     
     Different model architectures have different attribute names for the head:
-    - vit_b_16: model.heads
-    - mobilevit_s, swin_tiny: model.head
+    - vit_b_16 (torchvision): model.heads
+    - vit_s_16, mobilevit_s, swin_tiny, swin_small (timm): model.head
+    - mobilevitv2_* (timm): model.head.fc
     """
     if model_name == "vit_b_16":
         return model.heads
-    elif model_name in ["mobilevit_s", "swin_tiny"]:
+    elif model_name in ["vit_s_16", "mobilevit_s", "swin_tiny", "swin_small"]:
         return model.head
+    elif model_name in ["mobilevitv2_100", "mobilevitv2_150"]:
+        return model.head.fc
     else:
-        raise ValueError(f"Unknown model: {model_name}")
+        raise ValueError(f"Unknown model: {model_name}. Check SUPPORTED_MODELS.")
 
 
 def trainer(net, trainloader, optimizer, epochs, device: torch.device | str):
