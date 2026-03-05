@@ -173,6 +173,26 @@ def get_experiments(use_wandb=False, batch_size=128):
         )
     
     # ==========================================================================
+    # ABLATION: MobileViT Full Fine-tuning (vs head-only)
+    # Tests if lightweight architectures need different parameter-updating strategies
+    # ==========================================================================
+    for model, desc in [
+        ("mobilevit_s", "MobileViT-v1-S"),
+        ("mobilevitv2_100", "MobileViT-v2-1.0"),
+        ("mobilevitv2_150", "MobileViT-v2-1.5"),
+    ]:
+        model_short = model.replace("_", "")
+        name = f"fl_fedavg_dirichlet_{model_short}_full"
+        experiments[name] = ExperimentConfig(
+            name=name,
+            phase="ablation",
+            command=["flwr", "run", ".", "--run-config",
+                     f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" finetune-mode="full" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
+            description=f"FedAvg + {desc} FULL fine-tuning",
+            is_flwr=True,
+        )
+    
+    # ==========================================================================
     # ABLATION: Dirichlet Alpha
     # ==========================================================================
     for alpha in [0.1, 0.5, 1.0]:
