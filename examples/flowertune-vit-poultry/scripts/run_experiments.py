@@ -175,6 +175,7 @@ def get_experiments(use_wandb=False, batch_size=128):
     # ==========================================================================
     # ABLATION: MobileViT Full Fine-tuning (vs head-only)
     # Tests if lightweight architectures need different parameter-updating strategies
+    # Full fine-tuning needs lower LR (1e-4, 1e-5) to avoid exploding gradients
     # ==========================================================================
     for model, desc in [
         ("mobilevit_s", "MobileViT-v1-S"),
@@ -182,15 +183,28 @@ def get_experiments(use_wandb=False, batch_size=128):
         ("mobilevitv2_150", "MobileViT-v2-1.5"),
     ]:
         model_short = model.replace("_", "")
+        # Original with default LR (0.001) - likely too high
         name = f"fl_fedavg_dirichlet_{model_short}_full"
         experiments[name] = ExperimentConfig(
             name=name,
             phase="ablation",
             command=["flwr", "run", ".", "--run-config",
                      f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" finetune-mode="full" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
-            description=f"FedAvg + {desc} FULL fine-tuning",
+            description=f"FedAvg + {desc} FULL fine-tuning (LR=0.001)",
             is_flwr=True,
         )
+        
+        # Lower learning rates for full fine-tuning
+        for lr, lr_tag in [(0.0001, "1e4"), (0.00001, "1e5")]:
+            name = f"fl_fedavg_dirichlet_{model_short}_full_lr{lr_tag}"
+            experiments[name] = ExperimentConfig(
+                name=name,
+                phase="ablation",
+                command=["flwr", "run", ".", "--run-config",
+                         f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" finetune-mode="full" learning-rate={lr} num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
+                description=f"FedAvg + {desc} FULL (LR={lr})",
+                is_flwr=True,
+            )
     
     # ==========================================================================
     # ABLATION: Dirichlet Alpha
