@@ -39,6 +39,7 @@ def trainer_fedprox(
     """
     criterion = torch.nn.CrossEntropyLoss()
     net.train()
+    freeze_batchnorm(net)  # Keep BN in eval mode for FL
     net.to(device)
 
     total_loss = 0.0
@@ -68,10 +69,18 @@ def trainer_fedprox(
     return total_loss / total_samples
 
 
+def freeze_batchnorm(model):
+    """Freeze BatchNorm layers to use pretrained statistics (important for FL)."""
+    for module in model.modules():
+        if isinstance(module, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d, torch.nn.BatchNorm3d)):
+            module.eval()
+
+
 def trainer_standard(net, trainloader, optimizer, epochs, device):
     """Standard training without proximal term (FedAvg)."""
     criterion = torch.nn.CrossEntropyLoss()
     net.train()
+    freeze_batchnorm(net)  # Keep BN in eval mode for FL
     net.to(device)
 
     total_loss = 0.0
