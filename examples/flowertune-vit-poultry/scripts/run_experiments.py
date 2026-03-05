@@ -244,6 +244,59 @@ def get_experiments(use_wandb=False, batch_size=128):
             is_flwr=True,
         )
     
+    # ==========================================================================
+    # ABLATION: MobileViT with More Rounds (default LR)
+    # Testing if MobileViT models need more rounds to converge
+    # ==========================================================================
+    for model, desc in [("mobilevit_s", "MobileViT-v1-S"), ("mobilevitv2_100", "MobileViT-v2-1.0"), ("mobilevitv2_150", "MobileViT-v2-1.5")]:
+        model_short = model.replace("_", "").replace("v2", "v2_")
+        for rounds in [20, 30]:
+            name = f"fl_mobilevit_{model_short}_rounds{rounds}"
+            experiments[name] = ExperimentConfig(
+                name=name,
+                phase="ablation",
+                command=["flwr", "run", ".", "--run-config",
+                         f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" finetune-mode="head" num-server-rounds={rounds} batch-size={mobilevit_batch_size} {wandb_fl}'],
+                description=f"{desc} head-only {rounds} rounds",
+                is_flwr=True,
+            )
+    
+    # ==========================================================================
+    # ABLATION: MobileViT with More Rounds + Lower LR
+    # Combining more rounds with lower learning rates
+    # ==========================================================================
+    for model, desc in [("mobilevit_s", "MobileViT-v1-S"), ("mobilevitv2_100", "MobileViT-v2-1.0"), ("mobilevitv2_150", "MobileViT-v2-1.5")]:
+        model_short = model.replace("_", "").replace("v2", "v2_")
+        for rounds in [20, 30]:
+            for lr, lr_tag in [(0.0001, "1e4"), (0.00001, "1e5")]:
+                name = f"fl_mobilevit_{model_short}_rounds{rounds}_lr{lr_tag}"
+                experiments[name] = ExperimentConfig(
+                    name=name,
+                    phase="ablation",
+                    command=["flwr", "run", ".", "--run-config",
+                             f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" finetune-mode="head" learning-rate={lr} num-server-rounds={rounds} batch-size={mobilevit_batch_size} {wandb_fl}'],
+                    description=f"{desc} head-only {rounds} rounds LR={lr}",
+                    is_flwr=True,
+                )
+    
+    # ==========================================================================
+    # ABLATION: MobileViT with FedAdam
+    # FedAdam uses adaptive server-side learning rate which may help with
+    # MobileViT's small logit magnitudes
+    # ==========================================================================
+    for model, desc in [("mobilevit_s", "MobileViT-v1-S"), ("mobilevitv2_100", "MobileViT-v2-1.0"), ("mobilevitv2_150", "MobileViT-v2-1.5")]:
+        model_short = model.replace("_", "").replace("v2", "v2_")
+        for server_lr, lr_tag in [(0.1, "01"), (0.01, "001"), (1.0, "1")]:
+            name = f"fl_fedadam_mobilevit_{model_short}_lr{lr_tag}"
+            experiments[name] = ExperimentConfig(
+                name=name,
+                phase="ablation",
+                command=["flwr", "run", ".", "--run-config",
+                         f'strategy="fedadam" server-lr={server_lr} partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" finetune-mode="head" num-server-rounds=10 batch-size={mobilevit_batch_size} {wandb_fl}'],
+                description=f"FedAdam (η={server_lr}) {desc}",
+                is_flwr=True,
+            )
+    
     return experiments
 
 
