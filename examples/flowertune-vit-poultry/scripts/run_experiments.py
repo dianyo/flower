@@ -142,6 +142,7 @@ def get_experiments(use_wandb=False, batch_size=128):
     # ==========================================================================
     # FEDERATED: FedAdam Experiments
     # ==========================================================================
+    # FedAdam with ViT-B/16 (different learning rates)
     for server_lr in [0.1, 0.01]:
         lr_str = str(server_lr).replace(".", "")
         name = f"fl_fedadam_dirichlet_vit_lr{lr_str}"
@@ -150,7 +151,24 @@ def get_experiments(use_wandb=False, batch_size=128):
             phase="federated",
             command=["flwr", "run", ".", "--run-config",
                      f'strategy="fedadam" server-lr={server_lr} partitioning="dirichlet" dirichlet-alpha=0.5 model-name="vit_b_16" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
-            description=f"FedAdam (η={server_lr}) with Dirichlet and ViT",
+            description=f"FedAdam (η={server_lr}) with Dirichlet and ViT-B/16",
+            is_flwr=True,
+        )
+    
+    # FedAdam with other models (η=0.1 which worked best)
+    for model, desc in [
+        ("vit_s_16", "ViT-S/16"),
+        ("swin_tiny", "Swin-Tiny"),
+        ("swin_small", "Swin-Small"),
+    ]:
+        model_short = model.replace("_", "")
+        name = f"fl_fedadam_dirichlet_{model_short}"
+        experiments[name] = ExperimentConfig(
+            name=name,
+            phase="federated",
+            command=["flwr", "run", ".", "--run-config",
+                     f'strategy="fedadam" server-lr=0.1 partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
+            description=f"FedAdam (η=0.1) with Dirichlet and {desc}",
             is_flwr=True,
         )
     
