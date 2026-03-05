@@ -105,6 +105,7 @@ def get_experiments(use_wandb=False, batch_size=128):
         )
     
     # FedAvg Model Comparison (all with Dirichlet α=0.5)
+    # NOTE: MobileViT uses smaller batch size (64) to avoid OOM with concurrent FL clients
     for model, desc in [
         ("vit_s_16", "ViT-S/16"),
         ("swin_tiny", "Swin-Tiny"),
@@ -114,12 +115,14 @@ def get_experiments(use_wandb=False, batch_size=128):
         ("mobilevitv2_150", "MobileViT-v2-1.5"),
     ]:
         model_short = model.replace("_", "").replace("v2", "v2_")
+        # MobileViT needs smaller batch size due to higher memory usage per client
+        bs = 64 if "mobilevit" in model else batch_size
         name = f"fl_fedavg_dirichlet_{model_short}"
         experiments[name] = ExperimentConfig(
             name=name,
             phase="federated",
             command=["flwr", "run", ".", "--run-config",
-                     f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
+                     f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" num-server-rounds=10 batch-size={bs} {wandb_fl}'],
             description=f"FedAvg with Dirichlet and {desc}",
             is_flwr=True,
         )
@@ -176,7 +179,10 @@ def get_experiments(use_wandb=False, batch_size=128):
     # ABLATION: MobileViT Learning Rate Sweep
     # MobileViT fails at default LR for both head-only and full fine-tuning
     # Comprehensive LR sweep to find optimal settings
+    # NOTE: MobileViT uses smaller batch size (64) to avoid OOM with concurrent clients
     # ==========================================================================
+    mobilevit_batch_size = min(64, batch_size)  # MobileViT needs smaller batch due to memory
+    
     mobilevit_models = [
         ("mobilevit_s", "MobileViT-v1-S"),
         ("mobilevitv2_100", "MobileViT-v2-1.0"),
@@ -204,7 +210,7 @@ def get_experiments(use_wandb=False, batch_size=128):
                     name=name,
                     phase="ablation",
                     command=["flwr", "run", ".", "--run-config",
-                             f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" finetune-mode="{ft_mode}" learning-rate={lr} num-server-rounds=10 batch-size={batch_size} {wandb_fl}'],
+                             f'strategy="fedavg" partitioning="dirichlet" dirichlet-alpha=0.5 model-name="{model}" finetune-mode="{ft_mode}" learning-rate={lr} num-server-rounds=10 batch-size={mobilevit_batch_size} {wandb_fl}'],
                     description=f"{desc} {ft_tag} LR={lr}",
                     is_flwr=True,
                 )
