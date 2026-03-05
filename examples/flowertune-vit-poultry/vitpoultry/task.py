@@ -27,6 +27,27 @@ except ImportError:
     TIMM_AVAILABLE = False
 
 
+def _scale_mobilevitv2_head(model, scale_factor: float = 10.0):
+    """Scale MobileViT v2 head weights to produce reasonable logit magnitudes.
+    
+    MobileViT v2 produces highly normalized features (std ~0.3) compared to v1 (std ~22).
+    Combined with small random head weights (std ~0.01), this results in very small logits
+    (std ~0.07), causing nearly uniform softmax outputs and tiny gradients.
+    
+    Scaling the head weights by ~10x produces logits with std ~0.5-1.0, which is
+    appropriate for training. This is essentially equivalent to using a larger
+    learning rate but is more principled as it starts from a better initialization.
+    
+    Args:
+        model: MobileViT v2 model with head.fc layer.
+        scale_factor: Factor to scale head weights (default 10.0 based on feature ratio).
+    """
+    with torch.no_grad():
+        model.head.fc.weight.data *= scale_factor
+        if model.head.fc.bias is not None:
+            model.head.fc.bias.data *= scale_factor
+
+
 def get_model(num_classes: int, model_name: str = "vit_b_16", finetune_mode: str = "head"):
     """Return a pretrained model with configurable fine-tuning mode.
 
@@ -74,6 +95,9 @@ def get_model(num_classes: int, model_name: str = "vit_b_16", finetune_mode: str
         if not TIMM_AVAILABLE:
             raise ImportError("Install timm for MobileViT v2: pip install timm")
         model = timm.create_model("mobilevitv2_100", pretrained=True, num_classes=num_classes)
+        # Scale head weights to compensate for small feature magnitudes in v2
+        # MobileViT v2 features have ~30x smaller std than v1, causing tiny logits
+        _scale_mobilevitv2_head(model)
         if not full_finetune:
             for param in model.parameters():
                 param.requires_grad = False
@@ -84,6 +108,8 @@ def get_model(num_classes: int, model_name: str = "vit_b_16", finetune_mode: str
         if not TIMM_AVAILABLE:
             raise ImportError("Install timm for MobileViT v2: pip install timm")
         model = timm.create_model("mobilevitv2_150", pretrained=True, num_classes=num_classes)
+        # Scale head weights to compensate for small feature magnitudes in v2
+        _scale_mobilevitv2_head(model)
         if not full_finetune:
             for param in model.parameters():
                 param.requires_grad = False
