@@ -46,6 +46,7 @@ proximal-mu = 0.1
 server-lr = 0.1
 partitioning = "iid"
 dirichlet-alpha = 0.5
+finetune-mode = "head"
 wandb = false
 
 

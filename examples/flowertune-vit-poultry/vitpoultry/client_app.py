@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 
 from vitpoultry.task import (
     apply_train_transforms,
+    calculate_model_bytes,
     get_dataset_partition,
     get_finetune_layers,
     get_model,
@@ -100,6 +101,7 @@ def train(msg: Message, context: Context):
     proximal_mu = context.run_config.get("proximal-mu", 0.1)
     partitioning = context.run_config.get("partitioning", "iid")
     dirichlet_alpha = context.run_config.get("dirichlet-alpha", 0.5)
+    finetune_mode = context.run_config.get("finetune-mode", "head")
 
     if (
         "partition-id" in context.node_config
@@ -132,8 +134,8 @@ def train(msg: Message, context: Context):
         num_workers=8, pin_memory=True, prefetch_factor=4
     )
 
-    model = get_model(num_classes, model_name)
-    finetune_layers = get_finetune_layers(model, model_name)
+    model = get_model(num_classes, model_name, finetune_mode)
+    finetune_layers = get_finetune_layers(model, model_name, finetune_mode)
     global_state_dict = msg.content["arrays"].to_torch_state_dict()
     finetune_layers.load_state_dict(global_state_dict, strict=True)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -153,10 +155,15 @@ def train(msg: Message, context: Context):
             model, trainloader, optimizer, epochs=1, device=device
         )
 
-    model_record = ArrayRecord(finetune_layers.state_dict())
+    local_state_dict = finetune_layers.state_dict()
+    model_record = ArrayRecord(local_state_dict)
+    
+    upload_bytes = calculate_model_bytes(local_state_dict)
+    
     metrics = {
         "train_loss": avg_train_loss,
         "num-examples": len(trainloader.dataset),
+        "upload_bytes": upload_bytes,
     }
     metric_record = MetricRecord(metrics)
     content = RecordDict({"arrays": model_record, "metrics": metric_record})

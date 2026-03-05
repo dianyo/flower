@@ -27,76 +27,88 @@ except ImportError:
     TIMM_AVAILABLE = False
 
 
-def get_model(num_classes: int, model_name: str = "vit_b_16"):
-    """Return a pretrained model with frozen backbone and trainable head.
+def get_model(num_classes: int, model_name: str = "vit_b_16", finetune_mode: str = "head"):
+    """Return a pretrained model with configurable fine-tuning mode.
 
     Args:
         num_classes: Number of output classes.
         model_name: One of the supported models (see SUPPORTED_MODELS).
+        finetune_mode: "head" for head-only fine-tuning, "full" for full model fine-tuning.
 
     Returns:
-        Model with frozen backbone and trainable classification head.
+        Model with trainable parameters based on finetune_mode.
     """
+    full_finetune = finetune_mode == "full"
+    
     if model_name == "vit_b_16":
         model = vit_b_16(weights=ViT_B_16_Weights.IMAGENET1K_V1)
         in_features = model.heads[-1].in_features
         model.heads[-1] = torch.nn.Linear(in_features, num_classes)
-        model.requires_grad_(False)
-        model.heads.requires_grad_(True)
+        if full_finetune:
+            model.requires_grad_(True)
+        else:
+            model.requires_grad_(False)
+            model.heads.requires_grad_(True)
 
     elif model_name == "vit_s_16":
         if not TIMM_AVAILABLE:
             raise ImportError("Install timm for ViT-S: pip install timm")
         model = timm.create_model("vit_small_patch16_224", pretrained=True, num_classes=num_classes)
-        for param in model.parameters():
-            param.requires_grad = False
-        for param in model.head.parameters():
-            param.requires_grad = True
+        if not full_finetune:
+            for param in model.parameters():
+                param.requires_grad = False
+            for param in model.head.parameters():
+                param.requires_grad = True
 
     elif model_name == "mobilevit_s":
         if not TIMM_AVAILABLE:
             raise ImportError("Install timm for MobileViT: pip install timm")
         model = timm.create_model("mobilevit_s", pretrained=True, num_classes=num_classes)
-        for param in model.parameters():
-            param.requires_grad = False
-        for param in model.head.parameters():
-            param.requires_grad = True
+        if not full_finetune:
+            for param in model.parameters():
+                param.requires_grad = False
+            for param in model.head.parameters():
+                param.requires_grad = True
 
     elif model_name == "mobilevitv2_100":
         if not TIMM_AVAILABLE:
             raise ImportError("Install timm for MobileViT v2: pip install timm")
         model = timm.create_model("mobilevitv2_100", pretrained=True, num_classes=num_classes)
-        for param in model.parameters():
-            param.requires_grad = False
-        for param in model.head.fc.parameters():
-            param.requires_grad = True
+        if not full_finetune:
+            for param in model.parameters():
+                param.requires_grad = False
+            for param in model.head.fc.parameters():
+                param.requires_grad = True
 
     elif model_name == "mobilevitv2_150":
         if not TIMM_AVAILABLE:
             raise ImportError("Install timm for MobileViT v2: pip install timm")
         model = timm.create_model("mobilevitv2_150", pretrained=True, num_classes=num_classes)
-        for param in model.parameters():
-            param.requires_grad = False
-        for param in model.head.fc.parameters():
-            param.requires_grad = True
+        if not full_finetune:
+            for param in model.parameters():
+                param.requires_grad = False
+            for param in model.head.fc.parameters():
+                param.requires_grad = True
 
     elif model_name == "swin_tiny":
         if not TIMM_AVAILABLE:
             raise ImportError("Install timm for Swin: pip install timm")
         model = timm.create_model("swin_tiny_patch4_window7_224", pretrained=True, num_classes=num_classes)
-        for param in model.parameters():
-            param.requires_grad = False
-        for param in model.head.parameters():
-            param.requires_grad = True
+        if not full_finetune:
+            for param in model.parameters():
+                param.requires_grad = False
+            for param in model.head.parameters():
+                param.requires_grad = True
 
     elif model_name == "swin_small":
         if not TIMM_AVAILABLE:
             raise ImportError("Install timm for Swin: pip install timm")
         model = timm.create_model("swin_small_patch4_window7_224", pretrained=True, num_classes=num_classes)
-        for param in model.parameters():
-            param.requires_grad = False
-        for param in model.head.parameters():
-            param.requires_grad = True
+        if not full_finetune:
+            for param in model.parameters():
+                param.requires_grad = False
+            for param in model.head.parameters():
+                param.requires_grad = True
 
     else:
         supported = ["vit_b_16", "vit_s_16", "mobilevit_s", "mobilevitv2_100", "mobilevitv2_150", "swin_tiny", "swin_small"]
@@ -116,14 +128,42 @@ SUPPORTED_MODELS = {
 }
 
 
-def get_finetune_layers(model, model_name: str = "vit_b_16"):
-    """Get the finetune layers (classification head) for a model.
+def calculate_model_bytes(state_dict: dict) -> int:
+    """Calculate total bytes for a model state dict (for bandwidth tracking).
+    
+    Args:
+        state_dict: PyTorch state dict (can be from model or specific layers).
+    
+    Returns:
+        Total bytes (each param is float32 = 4 bytes).
+    """
+    total_bytes = 0
+    for tensor in state_dict.values():
+        total_bytes += tensor.numel() * tensor.element_size()
+    return total_bytes
+
+
+def get_trainable_params_count(model) -> int:
+    """Count trainable parameters in a model."""
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def get_finetune_layers(model, model_name: str = "vit_b_16", finetune_mode: str = "head"):
+    """Get the finetune layers for a model based on finetune mode.
+    
+    Args:
+        model: The model instance.
+        model_name: Name of the model architecture.
+        finetune_mode: "head" returns only the classification head, "full" returns entire model.
     
     Different model architectures have different attribute names for the head:
     - vit_b_16 (torchvision): model.heads
     - vit_s_16, mobilevit_s, swin_tiny, swin_small (timm): model.head
     - mobilevitv2_* (timm): model.head.fc
     """
+    if finetune_mode == "full":
+        return model
+    
     if model_name == "vit_b_16":
         return model.heads
     elif model_name in ["vit_s_16", "mobilevit_s", "swin_tiny", "swin_small"]:

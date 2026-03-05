@@ -15,7 +15,14 @@ try:
 except ImportError:
     WANDB_AVAILABLE = False
 
-from vitpoultry.task import apply_eval_transforms, get_finetune_layers, get_model, test
+from vitpoultry.task import (
+    apply_eval_transforms,
+    calculate_model_bytes,
+    get_finetune_layers,
+    get_model,
+    get_trainable_params_count,
+    test,
+)
 
 app = ServerApp()
 
@@ -47,10 +54,28 @@ def main(grid: Grid, context: Context) -> None:
     server_lr = context.run_config.get("server-lr", 0.1)
     partitioning = context.run_config.get("partitioning", "iid")
     dirichlet_alpha = context.run_config.get("dirichlet-alpha", 0.5)
+    finetune_mode = context.run_config.get("finetune-mode", "head")
     use_wandb = context.run_config.get("wandb", False)
+
+    model = get_model(num_classes, model_name, finetune_mode)
+    finetune_layers = get_finetune_layers(model, model_name, finetune_mode)
+    initial_state_dict = finetune_layers.state_dict()
+    arrays = ArrayRecord(initial_state_dict)
+    
+    trainable_params = get_trainable_params_count(model)
+    params_bytes = calculate_model_bytes(initial_state_dict)
+    num_clients = 10
+    per_round_bandwidth = params_bytes * num_clients * 2
+    total_bandwidth = per_round_bandwidth * num_rounds
+    
+    print(f"[Bandwidth] Trainable params: {trainable_params:,}")
+    print(f"[Bandwidth] Per-round: {per_round_bandwidth / 1024:.2f} KB ({num_clients} clients × 2 × {params_bytes} bytes)")
+    print(f"[Bandwidth] Total estimated ({num_rounds} rounds): {total_bandwidth / (1024*1024):.2f} MB")
 
     if use_wandb and WANDB_AVAILABLE and not _wandb_initialized:
         run_name = f"fl_{strategy_name}_{partitioning}_{model_name}"
+        if finetune_mode == "full":
+            run_name += "_full"
         if strategy_name == "fedprox":
             run_name += f"_mu{proximal_mu}"
         elif strategy_name == "fedadam":
@@ -62,6 +87,7 @@ def main(grid: Grid, context: Context) -> None:
                 "experiment_type": "federated",
                 "strategy": strategy_name,
                 "model_name": model_name,
+                "finetune_mode": finetune_mode,
                 "num_rounds": num_rounds,
                 "partitioning": partitioning,
                 "dirichlet_alpha": dirichlet_alpha if partitioning == "dirichlet" else None,
@@ -69,14 +95,14 @@ def main(grid: Grid, context: Context) -> None:
                 "server_lr": server_lr if strategy_name == "fedadam" else None,
                 "dataset": dataset_name,
                 "num_classes": num_classes,
+                "trainable_params": trainable_params,
+                "params_bytes": params_bytes,
+                "per_round_bandwidth_bytes": per_round_bandwidth,
+                "total_bandwidth_bytes": total_bandwidth,
             },
-            tags=["federated", strategy_name, model_name, partitioning],
+            tags=["federated", strategy_name, model_name, partitioning, finetune_mode],
         )
         _wandb_initialized = True
-
-    model = get_model(num_classes, model_name)
-    finetune_layers = get_finetune_layers(model, model_name)
-    arrays = ArrayRecord(finetune_layers.state_dict())
 
     if strategy_name == "fedavg":
         strategy = FedAvg(
@@ -98,14 +124,14 @@ def main(grid: Grid, context: Context) -> None:
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}. Choose: fedavg, fedprox, fedadam")
 
-    print(f"Starting FL with strategy={strategy_name}, model={model_name}")
+    print(f"Starting FL with strategy={strategy_name}, model={model_name}, finetune_mode={finetune_mode}")
     print(f"WandB: {'enabled' if (use_wandb and WANDB_AVAILABLE) else 'disabled'}")
 
     result = strategy.start(
         grid=grid,
         initial_arrays=arrays,
         num_rounds=num_rounds,
-        evaluate_fn=get_evaluate_fn(test_set, num_classes, model_name, use_wandb and WANDB_AVAILABLE),
+        evaluate_fn=get_evaluate_fn(test_set, num_classes, model_name, finetune_mode, use_wandb and WANDB_AVAILABLE),
     )
 
     print("\nSaving final model to disk...")
@@ -122,6 +148,7 @@ def get_evaluate_fn(
     centralized_testset: Dataset,
     num_classes: int,
     model_name: str = "vit_b_16",
+    finetune_mode: str = "head",
     use_wandb: bool = False,
 ):
     """Return an evaluation function for centralized evaluation."""
@@ -130,8 +157,8 @@ def get_evaluate_fn(
         """Use the entire test set for evaluation."""
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-        model = get_model(num_classes, model_name)
-        finetune_layers = get_finetune_layers(model, model_name)
+        model = get_model(num_classes, model_name, finetune_mode)
+        finetune_layers = get_finetune_layers(model, model_name, finetune_mode)
         finetune_layers.load_state_dict(arrays.to_torch_state_dict(), strict=True)
         model.to(device)
 
