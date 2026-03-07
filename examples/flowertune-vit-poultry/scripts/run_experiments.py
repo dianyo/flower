@@ -73,19 +73,26 @@ def get_experiments(use_wandb=False, batch_size=128):
     # ==========================================================================
     # BASELINE: Single-Farm Training (Lower Bound) - All Partitions
     # ==========================================================================
-    for partitioning in ["iid", "dirichlet"]:
-        for partition_id in range(10):
-            name = f"single_farm_vit_{partitioning}_p{partition_id}"
-            extra_args = ["--dirichlet-alpha", "0.5"] if partitioning == "dirichlet" else []
-            experiments[name] = ExperimentConfig(
-                name=name,
-                phase="baseline",
-                command=["python", "-m", "vitpoultry.single_farm_baseline",
-                         "--model-name", "vit_b_16", "--epochs", "10", "--batch-size", bs,
-                         "--partition-id", str(partition_id), "--num-partitions", "10",
-                         "--partitioning", partitioning] + extra_args + wandb_flag,
-                description=f"Single farm training ({partitioning}, partition {partition_id})",
-            )
+    single_farm_models = [
+        ("vit_b_16", "vit"),
+        ("vit_s_16", "vits16"),
+        ("swin_tiny", "swintiny"),
+        ("swin_small", "swinsmall"),
+    ]
+    for model_name, model_short in single_farm_models:
+        for partitioning in ["iid", "dirichlet"]:
+            for partition_id in range(10):
+                name = f"single_farm_{model_short}_{partitioning}_p{partition_id}"
+                extra_args = ["--dirichlet-alpha", "0.5"] if partitioning == "dirichlet" else []
+                experiments[name] = ExperimentConfig(
+                    name=name,
+                    phase="baseline",
+                    command=["python", "-m", "vitpoultry.single_farm_baseline",
+                             "--model-name", model_name, "--epochs", "10", "--batch-size", bs,
+                             "--partition-id", str(partition_id), "--num-partitions", "10",
+                             "--partitioning", partitioning] + extra_args + wandb_flag,
+                    description=f"Single farm {model_name} ({partitioning}, partition {partition_id})",
+                )
     
     # ==========================================================================
     # FEDERATED: FedAvg Experiments
