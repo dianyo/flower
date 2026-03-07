@@ -1,0 +1,3 @@
+# For running paper figure scripts (figures/)
+matplotlib>=3.5
+pandas>=1.3
