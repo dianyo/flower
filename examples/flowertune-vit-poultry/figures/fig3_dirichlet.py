@@ -49,13 +49,23 @@ def main():
         plot_type="bar",
         size_unit="absolute",
         partition_id_axis="x",
-        title="Figure 3: Non-IID farm distribution (Dirichlet α=0.5)",
+        title="",
         legend=True,
         verbose_labels=True,
         legend_title="Class",
     )
-    # Optional: use class names if dataframe has numeric column names
+    # No title (caption used instead); legend inside plot, top-right
     if figure is not None:
+        axis.set_title("")
+        if figure.legends:
+            handles, _ = axis.get_legend_handles_labels()
+            figure.legends[0].remove()
+            # Use class names for legend (order matches stacked bars: reversed)
+            axis.legend(
+                handles[::-1], CLASS_NAMES[::-1],
+                title="Class",
+                loc="upper right",
+            )
         out = OUTPUT_DIR / "fig3_dirichlet.png"
         figure.savefig(out, dpi=150, bbox_inches="tight")
         print(f"Saved {out}")
